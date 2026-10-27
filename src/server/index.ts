@@ -10,6 +10,7 @@ import { mediaRoutes } from './routes/media';
 import { eventRoutes } from './routes/events';
 import { cronRoutes } from './routes/cron';
 import { categoryRoutes } from './routes/categories';
+import { suggestionRoutes } from './routes/suggestions';
 
 const app = new Hono<AppContext>();
 
@@ -34,6 +35,8 @@ app.use('*', async (c, next) => {
       BETTER_AUTH_URL: c.env.BETTER_AUTH_URL,
       GOOGLE_CLIENT_ID: c.env.GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET: c.env.GOOGLE_CLIENT_SECRET,
+      FACEBOOK_CLIENT_ID: c.env.FACEBOOK_CLIENT_ID,
+      FACEBOOK_CLIENT_SECRET: c.env.FACEBOOK_CLIENT_SECRET,
     });
 
     // Check session if Authorization header or cookie present
@@ -42,7 +45,13 @@ app.use('*', async (c, next) => {
         headers: c.req.raw.headers,
       });
       if (session) {
-        c.set('user', session.user as any);
+        const currentUser = session.user as any;
+        // Ensure curtis@builtnetworks.com has admin and pro tier automatically
+        if (currentUser.email === 'curtis@builtnetworks.com') {
+          currentUser.role = 'admin';
+          currentUser.tier = 'pro_annual';
+        }
+        c.set('user', currentUser);
         c.set('session', session.session as any);
       }
     } catch {
@@ -53,7 +62,7 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// Better Auth endpoint handler
+// Better Auth endpoint handler (Google, Facebook, Email/Password)
 app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
   const db = c.get('db');
   if (!db) {
@@ -64,8 +73,28 @@ app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
     BETTER_AUTH_URL: c.env.BETTER_AUTH_URL,
     GOOGLE_CLIENT_ID: c.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: c.env.GOOGLE_CLIENT_SECRET,
+    FACEBOOK_CLIENT_ID: c.env.FACEBOOK_CLIENT_ID,
+    FACEBOOK_CLIENT_SECRET: c.env.FACEBOOK_CLIENT_SECRET,
   });
   return auth.handler(c.req.raw);
+});
+
+// Quick endpoint to get current authenticated user status
+app.get('/api/auth/me', (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ user: null });
+  }
+  return c.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      tier: (user as any).tier || 'free',
+      image: user.image,
+    },
+  });
 });
 
 // API Routes
@@ -74,6 +103,7 @@ app.route('/api/media', mediaRoutes);
 app.route('/api/events', eventRoutes);
 app.route('/api/cron', cronRoutes);
 app.route('/api/categories', categoryRoutes);
+app.route('/api/suggestions', suggestionRoutes);
 
 // Health check endpoint
 app.get('/api/health', (c) => {

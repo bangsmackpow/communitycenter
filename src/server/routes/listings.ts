@@ -222,12 +222,41 @@ listingRoutes.post('/', zValidator('json', createListingSchema), async (c) => {
   const db = c.get('db');
   const user = c.get('user');
 
-  // Ensure authenticated session
-  const userId = user?.id || 'demo-user-id'; // Fallback demo ID if auth is optional in local/mock
+  // Strict security: require logged-in session
+  if (!user) {
+    return c.json({
+      error: 'Authentication required. Please sign in or register to post a listing.',
+      code: 'AUTH_REQUIRED',
+    }, 401);
+  }
+
+  const userId = user.id;
+
+  // Tier limit enforcement: Free tier gets 1 active listing; Pro or Admin gets unlimited
+  const isProOrAdmin = user.role === 'admin' || user.tier === 'pro_monthly' || user.tier === 'pro_annual';
+  if (!isProOrAdmin) {
+    const existingActive = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.listings)
+      .where(and(eq(schema.listings.userId, userId), eq(schema.listings.status, 'active')))
+      .get();
+
+    if (existingActive && existingActive.count >= 1) {
+      return c.json({
+        error: 'Free Community tier is limited to 1 active listing. Upgrade to Pro ($10/mo or $100/yr) for unlimited rentals, contractor postings, and featured placement.',
+        code: 'TIER_LIMIT_REACHED',
+        activeCount: existingActive.count,
+        limit: 1,
+      }, 402);
+    }
+  }
 
   const body = c.req.valid('json');
   const listingId = crypto.randomUUID();
   const slug = `${body.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}-${listingId.substring(0, 6)}`;
+
+  // Pro or Admin can set isFeatured; Free tier cannot
+  const isFeatured = isProOrAdmin ? (body.isFeatured || false) : false;
 
   // Default 30-day expiration
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -242,9 +271,9 @@ listingRoutes.post('/', zValidator('json', createListingSchema), async (c) => {
     description: body.description,
     priceCents: body.priceCents,
     contactPhone: body.contactPhone,
-    contactEmail: body.contactEmail || user?.email,
+    contactEmail: body.contactEmail || user.email,
     status: 'active',
-    isFeatured: body.isFeatured || false,
+    isFeatured,
     town: body.town,
     address: body.address,
     serviceRadiusMiles: body.serviceRadiusMiles,
@@ -256,7 +285,7 @@ listingRoutes.post('/', zValidator('json', createListingSchema), async (c) => {
     utilitiesIncluded: body.utilitiesIncluded,
     laundryType: body.laundryType,
     parkingType: body.parkingType,
-    emergencyAvailable: body.emergencyAvailable,
+    emergencyAvailable: isProOrAdmin ? body.emergencyAvailable : false, // Priority emergency badges for Pro tier
     insured: body.insured,
     freeEstimates: body.freeEstimates,
     serviceOfferings: body.serviceOfferings,
@@ -296,6 +325,10 @@ listingRoutes.patch('/:id', zValidator('json', updateListingSchema), async (c) =
   const user = c.get('user');
   const id = c.req.param('id');
 
+  if (!user) {
+    return c.json({ error: 'Authentication required. Please log in.' }, 401);
+  }
+
   const existing = await db
     .select()
     .from(schema.listings)
@@ -306,9 +339,11 @@ listingRoutes.patch('/:id', zValidator('json', updateListingSchema), async (c) =
     return c.json({ error: 'Listing not found' }, 404);
   }
 
-  // Security: Check ownership if user is authenticated and not admin
-  if (user && user.role !== 'admin' && existing.userId !== user.id) {
-    return c.json({ error: 'Forbidden: You do not own this listing' }, 403);
+  // Strict Security: Only admin or the listing's verified owner can modify
+  if (user.role !== 'admin' && existing.userId !== user.id) {
+    return c.json({
+      error: 'Forbidden: You do not have permission to modify listings or businesses that do not belong to you.',
+    }, 403);
   }
 
   const body = c.req.valid('json');
@@ -331,6 +366,10 @@ listingRoutes.delete('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
 
+  if (!user) {
+    return c.json({ error: 'Authentication required.' }, 401);
+  }
+
   const existing = await db
     .select()
     .from(schema.listings)
@@ -341,8 +380,10 @@ listingRoutes.delete('/:id', async (c) => {
     return c.json({ error: 'Listing not found' }, 404);
   }
 
-  if (user && user.role !== 'admin' && existing.userId !== user.id) {
-    return c.json({ error: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && existing.userId !== user.id) {
+    return c.json({
+      error: 'Forbidden: You do not have permission to delete listings that do not belong to you.',
+    }, 403);
   }
 
   // Soft delete by updating status to hidden

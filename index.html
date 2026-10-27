@@ -6,17 +6,28 @@
     <title>Southwest Iowa Community Central - Rentals, Contractors & Events</title>
     <meta name="description" content="Local community directory connecting Southwest Iowa residents to rental housing, trusted contractors, snow removal, and local community events." />
     
+    <!-- Theme Initializer: Light mode as default, dark mode selectable -->
+    <script>
+      try {
+        if (localStorage.getItem('theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (_) {}
+    </script>
+
     <!-- PWA Settings -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#1e293b" />
+    <meta name="theme-color" content="#5e8053" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="SW Iowa Hub" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
   </head>
-  <body class="bg-slate-900 text-slate-100 min-h-screen antialiased selection:bg-prairie-600 selection:text-white">
+  <body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen antialiased selection:bg-prairie-600 selection:text-white transition-colors duration-200">
     <div id="root"></div>
     <script type="module" src="/src/client/main.tsx"></script>
     <script>

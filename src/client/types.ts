@@ -1,5 +1,17 @@
 import type { SwIowaTown } from '../db/constants';
 
+export type BillingTier = 'free' | 'pro_monthly' | 'pro_annual';
+export type UserRole = 'user' | 'landlord' | 'business' | 'admin';
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  tier: BillingTier;
+  image?: string | null;
+}
+
 export interface ListingMedia {
   id: string;
   listingId: string;
@@ -71,4 +83,18 @@ export interface ListingFilter {
   petsAllowed?: boolean;
   emergencyAvailable?: boolean;
   q?: string;
+}
+
+export interface Suggestion {
+  id: string;
+  type: 'new_listing' | 'edit_suggestion';
+  listingId?: string | null;
+  submitterName?: string | null;
+  submitterEmail?: string | null;
+  title: string;
+  town?: string | null;
+  categoryType?: 'rental' | 'service' | 'event' | null;
+  details: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string | Date;
 }

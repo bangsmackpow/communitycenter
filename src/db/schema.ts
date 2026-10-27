@@ -10,6 +10,8 @@ export const users = sqliteTable('users', {
   emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
   image: text('image'),
   role: text('role', { enum: ['user', 'landlord', 'business', 'admin'] }).notNull().default('user'),
+  tier: text('tier', { enum: ['free', 'pro_monthly', 'pro_annual'] }).notNull().default('free'),
+  tierExpiresAt: integer('tier_expires_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
@@ -128,6 +130,20 @@ export const reportsAndFlags = sqliteTable('reports_and_flags', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
+export const suggestions = sqliteTable('suggestions', {
+  id: text('id').primaryKey(),
+  type: text('type', { enum: ['new_listing', 'edit_suggestion'] }).notNull(),
+  listingId: text('listing_id').references(() => listings.id, { onDelete: 'set null' }),
+  submitterName: text('submitter_name'),
+  submitterEmail: text('submitter_email'),
+  title: text('title').notNull(),
+  town: text('town'),
+  categoryType: text('category_type', { enum: ['rental', 'service', 'event'] }),
+  details: text('details').notNull(),
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Listing = typeof listings.$inferSelect;
@@ -136,3 +152,5 @@ export type ListingMedia = typeof listingMedia.$inferSelect;
 export type InsertListingMedia = typeof listingMedia.$inferInsert;
 export type Category = typeof categories.$inferSelect;
 export type ReportAndFlag = typeof reportsAndFlags.$inferSelect;
+export type Suggestion = typeof suggestions.$inferSelect;
+export type InsertSuggestion = typeof suggestions.$inferInsert;

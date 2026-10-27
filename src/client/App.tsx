@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Listing, ListingFilter } from './types';
+import type { Listing, ListingFilter, UserProfile } from './types';
 import { INITIAL_SAMPLE_LISTINGS } from './sampleData';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
@@ -7,6 +7,9 @@ import { HomeFeed } from './views/HomeFeed';
 import { ListingDetail } from './views/ListingDetail';
 import { CreateListingWizard } from './views/CreateListingWizard';
 import { Dashboard } from './views/Dashboard';
+import { AuthModal } from './components/AuthModal';
+import { PricingModal } from './components/PricingModal';
+import { SuggestionModal } from './components/SuggestionModal';
 
 export const App: React.FC = () => {
   const [listings, setListings] = useState<Listing[]>(INITIAL_SAMPLE_LISTINGS);
@@ -18,9 +21,61 @@ export const App: React.FC = () => {
   const [filters, setFilters] = useState<ListingFilter>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Modals
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isPricingOpen, setIsPricingOpen] = useState(false);
+  const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
+  const [targetListingForEdit, setTargetListingForEdit] = useState<Listing | null>(null);
+
+  // Theme: Light Mode as default, Dark Mode selectable
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark';
+    }
+    return false; // Default: Light mode
+  });
+
+  // Current User (Defaults to Curtis admin on first visit so admin is seeded and ready)
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('auth_user');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {}
+      }
+      // Initial default: Seed Curtis as Admin of the whole site
+      const adminCurtis: UserProfile = {
+        id: 'admin-curtis',
+        name: 'Curtis',
+        email: 'curtis@builtnetworks.com',
+        role: 'admin',
+        tier: 'pro_annual',
+      };
+      localStorage.setItem('auth_user', JSON.stringify(adminCurtis));
+      return adminCurtis;
+    }
+    return null;
+  });
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Sync theme with DOM
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleTheme = () => {
+    setIsDarkMode((prev) => !prev);
   };
 
   // Fetch live listings from Edge API if available
@@ -35,8 +90,7 @@ export const App: React.FC = () => {
           }
         }
       } catch (err) {
-        // Use initial sample data as fallback
-        console.log('Using sample community listings for local mode:', err);
+        console.log('Using local Southwest Iowa listings:', err);
       }
     };
     fetchListings();
@@ -60,6 +114,10 @@ export const App: React.FC = () => {
   const handleBottomTab = (tab: 'discover' | 'rentals' | 'services' | 'events' | 'post') => {
     setActiveBottomTab(tab);
     if (tab === 'post') {
+      if (!currentUser) {
+        setIsAuthOpen(true);
+        return;
+      }
       setCurrentView('create');
       return;
     }
@@ -82,20 +140,37 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Suggest an Edit
+  const handleSuggestEdit = (listing: Listing) => {
+    setTargetListingForEdit(listing);
+    setIsSuggestionOpen(true);
+  };
+
+  // Open general business suggestion
+  const handleOpenGeneralSuggestion = () => {
+    setTargetListingForEdit(null);
+    setIsSuggestionOpen(true);
+  };
+
   // Create Listing Submit
   const handleCreateListing = async (newListing: Partial<Listing>) => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      return;
+    }
+
     const fullListing: Listing = {
       id: crypto.randomUUID(),
-      userId: 'user-current',
+      userId: currentUser.id,
       categoryType: newListing.categoryType || 'rental',
       title: newListing.title || '',
       slug: (newListing.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       description: newListing.description || '',
       priceCents: newListing.priceCents,
       contactPhone: newListing.contactPhone,
-      contactEmail: newListing.contactEmail,
+      contactEmail: newListing.contactEmail || currentUser.email,
       status: 'active',
-      isFeatured: false,
+      isFeatured: newListing.isFeatured || false,
       town: newListing.town || 'Creston',
       address: newListing.address,
       serviceRadiusMiles: newListing.serviceRadiusMiles,
@@ -121,7 +196,6 @@ export const App: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    // Try posting to API
     try {
       await fetch('/api/listings', {
         method: 'POST',
@@ -129,7 +203,7 @@ export const App: React.FC = () => {
         body: JSON.stringify(fullListing),
       });
     } catch {
-      // Local preview fallback
+      // Local state fallback
     }
 
     setListings((prev) => [fullListing, ...prev]);
@@ -138,8 +212,17 @@ export const App: React.FC = () => {
     setCurrentView('detail');
   };
 
-  // Toggle Rented / Available Status
+  // Toggle Rented / Available Status with ownership verification
   const handleToggleRented = async (listingId: string, currentStatus: string) => {
+    const listing = listings.find((l) => l.id === listingId);
+    if (!listing) return;
+
+    // Security check: only admin or the listing creator can toggle status
+    if (currentUser && currentUser.role !== 'admin' && listing.userId !== currentUser.id) {
+      showToast('Permission denied: You do not own this listing.');
+      return;
+    }
+
     const nextStatus = currentStatus === 'rented' ? 'active' : 'rented';
 
     try {
@@ -148,27 +231,37 @@ export const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
       });
-    } catch {
-      // Handled in local state
-    }
+    } catch {}
 
     setListings((prev) =>
       prev.map((l) => (l.id === listingId ? { ...l, status: nextStatus as any } : l))
     );
+    if (selectedListing && selectedListing.id === listingId) {
+      setSelectedListing((prev) => (prev ? { ...prev, status: nextStatus as any } : null));
+    }
     showToast(`Status updated to ${nextStatus.toUpperCase()}`);
   };
 
-  // Soft delete / remove listing
+  // Soft delete / remove listing with ownership verification
   const handleDeleteListing = async (listingId: string) => {
+    const listing = listings.find((l) => l.id === listingId);
+    if (!listing) return;
+
+    if (currentUser && currentUser.role !== 'admin' && listing.userId !== currentUser.id) {
+      showToast('Permission denied: You do not own this listing.');
+      return;
+    }
+
     if (!confirm('Are you sure you want to archive this listing?')) return;
 
     try {
       await fetch(`/api/listings/${listingId}`, { method: 'DELETE' });
-    } catch {
-      // Local state fallback
-    }
+    } catch {}
 
     setListings((prev) => prev.filter((l) => l.id !== listingId));
+    if (selectedListing && selectedListing.id === listingId) {
+      setCurrentView('feed');
+    }
     showToast('Listing archived');
   };
 
@@ -176,11 +269,32 @@ export const App: React.FC = () => {
     showToast('Thank you. This listing has been flagged for community safety review.');
   };
 
+  const handleUpgradeTier = (tier: 'pro_monthly' | 'pro_annual') => {
+    if (currentUser) {
+      const updated: UserProfile = { ...currentUser, tier };
+      setCurrentUser(updated);
+      localStorage.setItem('auth_user', JSON.stringify(updated));
+      showToast(`Account successfully upgraded to Pro (${tier === 'pro_annual' ? '$100/year' : '$10/month'})!`);
+    } else {
+      setIsAuthOpen(true);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_user');
+    setCurrentUser(null);
+    showToast('Signed out of Southwest Iowa Hub');
+  };
+
+  const userActiveListingsCount = currentUser
+    ? listings.filter((l) => l.userId === currentUser.id && l.status === 'active').length
+    : 0;
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-prairie-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xl border border-prairie-500 animate-fade-in flex items-center gap-2">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-prairie-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xl border border-prairie-500 animate-fade-in flex items-center gap-2">
           <span>✓ {toastMessage}</span>
         </div>
       )}
@@ -191,8 +305,27 @@ export const App: React.FC = () => {
         onSelectTown={handleSelectTown}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
-        onOpenCreate={() => setCurrentView('create')}
-        onOpenDashboard={() => setCurrentView('dashboard')}
+        onOpenCreate={() => {
+          if (!currentUser) {
+            setIsAuthOpen(true);
+          } else {
+            setCurrentView('create');
+          }
+        }}
+        onOpenDashboard={() => {
+          if (!currentUser) {
+            setIsAuthOpen(true);
+          } else {
+            setCurrentView('dashboard');
+          }
+        }}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenPricing={() => setIsPricingOpen(true)}
+        onOpenSuggestion={handleOpenGeneralSuggestion}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        isDarkMode={isDarkMode}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Content Area */}
@@ -203,30 +336,46 @@ export const App: React.FC = () => {
             filters={filters}
             onFilterChange={setFilters}
             onSelectListing={handleSelectListing}
-            onOpenCreate={() => setCurrentView('create')}
+            onOpenCreate={() => {
+              if (!currentUser) {
+                setIsAuthOpen(true);
+              } else {
+                setCurrentView('create');
+              }
+            }}
+            onOpenSuggestion={handleOpenGeneralSuggestion}
           />
         )}
 
         {currentView === 'detail' && selectedListing && (
           <ListingDetail
             listing={selectedListing}
+            currentUser={currentUser}
             onBack={() => setCurrentView('feed')}
             onReport={handleReport}
+            onSuggestEdit={handleSuggestEdit}
+            onToggleStatus={handleToggleRented}
           />
         )}
 
         {currentView === 'create' && (
           <CreateListingWizard
+            currentUser={currentUser}
+            userActiveListingsCount={userActiveListingsCount}
             onCancel={() => setCurrentView('feed')}
+            onOpenAuth={() => setIsAuthOpen(true)}
+            onOpenPricing={() => setIsPricingOpen(true)}
             onSubmit={handleCreateListing}
           />
         )}
 
-        {currentView === 'dashboard' && (
+        {currentView === 'dashboard' && currentUser && (
           <Dashboard
             listings={listings}
+            currentUser={currentUser}
             onBack={() => setCurrentView('feed')}
             onOpenCreate={() => setCurrentView('create')}
+            onOpenPricing={() => setIsPricingOpen(true)}
             onToggleRented={handleToggleRented}
             onDelete={handleDeleteListing}
             onSelectListing={handleSelectListing}
@@ -236,6 +385,32 @@ export const App: React.FC = () => {
 
       {/* Mobile Bottom Dock Navigation */}
       <BottomNav activeTab={activeBottomTab} onSelectTab={handleBottomTab} />
+
+      {/* Auth Modal (Login / Register / Social OAuth) */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onSuccess={(user) => {
+          setCurrentUser(user);
+          showToast(`Welcome, ${user.name}!`);
+        }}
+      />
+
+      {/* Pricing Modal ($10/mo or $100/yr Pro Tier) */}
+      <PricingModal
+        isOpen={isPricingOpen}
+        currentTier={currentUser?.tier || 'free'}
+        onClose={() => setIsPricingOpen(false)}
+        onUpgrade={handleUpgradeTier}
+      />
+
+      {/* Community Suggestion / Edit Modal */}
+      <SuggestionModal
+        isOpen={isSuggestionOpen}
+        targetListing={targetListingForEdit}
+        onClose={() => setIsSuggestionOpen(false)}
+        onSuccess={(msg) => showToast(msg)}
+      />
     </div>
   );
 };
