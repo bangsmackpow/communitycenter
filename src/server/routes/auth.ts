@@ -20,7 +20,6 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-// Helper to set session cookie
 function setSessionCookie(c: any, token: string) {
   const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
   c.header(
@@ -213,6 +212,12 @@ authRoutes.get('/me', async (c) => {
     return c.json({ user: null });
   }
 
+  // Ensure Curtis has admin role and pro_annual tier
+  if (user.email === 'curtis@builtnetworks.com') {
+    user.role = 'admin';
+    user.tier = 'pro_annual';
+  }
+
   return c.json({
     user: {
       id: user.id,
@@ -223,4 +228,216 @@ authRoutes.get('/me', async (c) => {
       image: user.image,
     },
   });
+});
+
+// --- OAuth: Google ---
+authRoutes.get('/oauth/google', (c) => {
+  const clientId = (c.env as any).GOOGLE_CLIENT_ID;
+  const baseUrl = (c.env as any).BETTER_AUTH_URL || new URL(c.req.url).origin;
+
+  if (!clientId) {
+    return c.html(`
+      <div style="font-family:sans-serif; max-width:500px; margin:50px auto; padding:24px; border:1px solid #e2e8f0; border-radius:16px;">
+        <h2 style="color:#1e293b; margin-top:0;">Google OAuth Setup Required</h2>
+        <p style="color:#64748b; font-size:14px; line-height:1.5;">To enable 1-click Google login, add these environment variables in your Cloudflare Pages Dashboard (under <strong>Settings &gt; Environment Variables</strong>):</p>
+        <ul style="font-size:13px; color:#334155;">
+          <li><code>GOOGLE_CLIENT_ID</code></li>
+          <li><code>GOOGLE_CLIENT_SECRET</code></li>
+        </ul>
+        <p style="font-size:13px; color:#64748b;">Authorized redirect URI in Google Cloud Console:</p>
+        <code style="background:#f1f5f9; padding:6px 10px; border-radius:8px; font-size:12px; display:block; word-break:break-all;">${baseUrl}/api/auth/oauth/google/callback</code>
+        <br/>
+        <a href="/" style="display:inline-block; background:#5e8053; color:#fff; padding:10px 18px; border-radius:10px; text-decoration:none; font-size:13px; font-weight:bold;">Return to Community Central</a>
+      </div>
+    `, 503);
+  }
+
+  const redirectUri = `${baseUrl}/api/auth/oauth/google/callback`;
+  const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+    clientId
+  )}&redirect_uri=${encodeURIComponent(
+    redirectUri
+  )}&response_type=code&scope=openid%20email%20profile&access_type=offline&prompt=consent`;
+
+  return c.redirect(googleAuthUrl);
+});
+
+authRoutes.get('/oauth/google/callback', async (c) => {
+  const code = c.req.query('code');
+  const db = c.get('db');
+  const clientId = (c.env as any).GOOGLE_CLIENT_ID;
+  const clientSecret = (c.env as any).GOOGLE_CLIENT_SECRET;
+  const baseUrl = (c.env as any).BETTER_AUTH_URL || new URL(c.req.url).origin;
+  const redirectUri = `${baseUrl}/api/auth/oauth/google/callback`;
+
+  if (!code || !clientId || !clientSecret) {
+    return c.redirect('/?oauth_error=missing_code_or_credentials');
+  }
+
+  try {
+    // Exchange code for token
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+    const tokenData = (await tokenRes.json()) as any;
+    if (!tokenData.access_token) {
+      throw new Error(tokenData.error_description || 'Failed to exchange Google token');
+    }
+
+    // Get user info
+    const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const profile = (await userinfoRes.json()) as any;
+    const email = profile.email?.toLowerCase();
+    if (!email) throw new Error('No email found in Google profile');
+
+    let user = await db.select().from(schema.users).where(eq(schema.users.email, email)).get();
+    const now = new Date();
+
+    if (!user) {
+      const userId = crypto.randomUUID();
+      const role = email === 'curtis@builtnetworks.com' ? 'admin' : 'user';
+      const tier = email === 'curtis@builtnetworks.com' ? 'pro_annual' : 'free';
+      await db.insert(schema.users).values({
+        id: userId,
+        name: profile.name || email.split('@')[0],
+        email,
+        emailVerified: true,
+        image: profile.picture || null,
+        role: role as any,
+        tier: tier as any,
+        createdAt: now,
+        updatedAt: now,
+      });
+      user = await db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    }
+
+    // Create session
+    const sessionToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await db.insert(schema.sessions).values({
+      id: crypto.randomUUID(),
+      userId: user!.id,
+      token: sessionToken,
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    setSessionCookie(c, sessionToken);
+    return c.redirect('/');
+  } catch (err) {
+    console.error('Google OAuth callback error:', err);
+    return c.redirect('/?oauth_error=failed');
+  }
+});
+
+// --- OAuth: Facebook ---
+authRoutes.get('/oauth/facebook', (c) => {
+  const clientId = (c.env as any).FACEBOOK_CLIENT_ID;
+  const baseUrl = (c.env as any).BETTER_AUTH_URL || new URL(c.req.url).origin;
+
+  if (!clientId) {
+    return c.html(`
+      <div style="font-family:sans-serif; max-width:500px; margin:50px auto; padding:24px; border:1px solid #e2e8f0; border-radius:16px;">
+        <h2 style="color:#1e293b; margin-top:0;">Facebook OAuth Setup Required</h2>
+        <p style="color:#64748b; font-size:14px; line-height:1.5;">To enable 1-click Facebook login, add these environment variables in your Cloudflare Pages Dashboard (under <strong>Settings &gt; Environment Variables</strong>):</p>
+        <ul style="font-size:13px; color:#334155;">
+          <li><code>FACEBOOK_CLIENT_ID</code></li>
+          <li><code>FACEBOOK_CLIENT_SECRET</code></li>
+        </ul>
+        <p style="font-size:13px; color:#64748b;">Valid OAuth Redirect URI in Facebook Developer App:</p>
+        <code style="background:#f1f5f9; padding:6px 10px; border-radius:8px; font-size:12px; display:block; word-break:break-all;">${baseUrl}/api/auth/oauth/facebook/callback</code>
+        <br/>
+        <a href="/" style="display:inline-block; background:#1877F2; color:#fff; padding:10px 18px; border-radius:10px; text-decoration:none; font-size:13px; font-weight:bold;">Return to Community Central</a>
+      </div>
+    `, 503);
+  }
+
+  const redirectUri = `${baseUrl}/api/auth/oauth/facebook/callback`;
+  const fbAuthUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${encodeURIComponent(
+    clientId
+  )}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=email,public_profile`;
+
+  return c.redirect(fbAuthUrl);
+});
+
+authRoutes.get('/oauth/facebook/callback', async (c) => {
+  const code = c.req.query('code');
+  const db = c.get('db');
+  const clientId = (c.env as any).FACEBOOK_CLIENT_ID;
+  const clientSecret = (c.env as any).FACEBOOK_CLIENT_SECRET;
+  const baseUrl = (c.env as any).BETTER_AUTH_URL || new URL(c.req.url).origin;
+  const redirectUri = `${baseUrl}/api/auth/oauth/facebook/callback`;
+
+  if (!code || !clientId || !clientSecret) {
+    return c.redirect('/?oauth_error=missing_code_or_credentials');
+  }
+
+  try {
+    const tokenRes = await fetch(
+      `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${encodeURIComponent(
+        clientId
+      )}&client_secret=${encodeURIComponent(clientSecret)}&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}&code=${encodeURIComponent(code)}`
+    );
+    const tokenData = (await tokenRes.json()) as any;
+    if (!tokenData.access_token) {
+      throw new Error(tokenData.error?.message || 'Failed to exchange Facebook token');
+    }
+
+    const userinfoRes = await fetch(
+      `https://graph.facebook.com/me?fields=id,name,email,picture&access_token=${tokenData.access_token}`
+    );
+    const profile = (await userinfoRes.json()) as any;
+    const email = (profile.email || `${profile.id}@facebook.user`).toLowerCase();
+
+    let user = await db.select().from(schema.users).where(eq(schema.users.email, email)).get();
+    const now = new Date();
+
+    if (!user) {
+      const userId = crypto.randomUUID();
+      const role = email === 'curtis@builtnetworks.com' ? 'admin' : 'user';
+      const tier = email === 'curtis@builtnetworks.com' ? 'pro_annual' : 'free';
+      await db.insert(schema.users).values({
+        id: userId,
+        name: profile.name || 'Facebook User',
+        email,
+        emailVerified: true,
+        image: profile.picture?.data?.url || null,
+        role: role as any,
+        tier: tier as any,
+        createdAt: now,
+        updatedAt: now,
+      });
+      user = await db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    }
+
+    const sessionToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await db.insert(schema.sessions).values({
+      id: crypto.randomUUID(),
+      userId: user!.id,
+      token: sessionToken,
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    setSessionCookie(c, sessionToken);
+    return c.redirect('/');
+  } catch (err) {
+    console.error('Facebook OAuth callback error:', err);
+    return c.redirect('/?oauth_error=failed');
+  }
 });

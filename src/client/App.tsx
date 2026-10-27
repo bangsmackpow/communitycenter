@@ -20,6 +20,7 @@ export const App: React.FC = () => {
   const [activeBottomTab, setActiveBottomTab] = useState<'discover' | 'rentals' | 'services' | 'events' | 'post'>('discover');
   const [filters, setFilters] = useState<ListingFilter>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [dashboardTab, setDashboardTab] = useState<'my' | 'admin_all' | 'suggestions' | 'users'>('my');
 
   // Modals
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -335,6 +336,15 @@ export const App: React.FC = () => {
           if (!currentUser) {
             setIsAuthOpen(true);
           } else {
+            setDashboardTab('my');
+            setCurrentView('dashboard');
+          }
+        }}
+        onOpenAdminUsers={() => {
+          if (!currentUser) {
+            setIsAuthOpen(true);
+          } else {
+            setDashboardTab('users');
             setCurrentView('dashboard');
           }
         }}
@@ -392,6 +402,7 @@ export const App: React.FC = () => {
           <Dashboard
             listings={listings}
             currentUser={currentUser}
+            initialTab={dashboardTab}
             onBack={() => setCurrentView('feed')}
             onOpenCreate={() => setCurrentView('create')}
             onOpenPricing={() => setIsPricingOpen(true)}

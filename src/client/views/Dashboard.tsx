@@ -26,6 +26,7 @@ import type { Listing, UserProfile, Suggestion } from '../types';
 interface DashboardProps {
   listings: Listing[];
   currentUser: UserProfile;
+  initialTab?: 'my' | 'admin_all' | 'suggestions' | 'users';
   onBack: () => void;
   onOpenCreate: () => void;
   onOpenPricing: () => void;
@@ -37,6 +38,7 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({
   listings,
   currentUser,
+  initialTab,
   onBack,
   onOpenCreate,
   onOpenPricing,
@@ -44,10 +46,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onDelete,
   onSelectListing,
 }) => {
-  const [activeTab, setActiveTab] = useState<'my' | 'admin_all' | 'suggestions' | 'users'>('my');
+  const [activeTab, setActiveTab] = useState<'my' | 'admin_all' | 'suggestions' | 'users'>(
+    initialTab || 'my'
+  );
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'rented'>('all');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Admin user management state
   const [adminUsers, setAdminUsers] = useState<any[]>([]);

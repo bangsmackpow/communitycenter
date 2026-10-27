@@ -10,6 +10,7 @@ import {
   LogOut,
   Sparkles,
   MessageSquarePlus,
+  Users,
 } from 'lucide-react';
 import { SW_IOWA_TOWNS } from '../../db/constants';
 import type { UserProfile } from '../types';
@@ -21,6 +22,7 @@ interface NavbarProps {
   onSearchChange: (q: string) => void;
   onOpenCreate: () => void;
   onOpenDashboard: () => void;
+  onOpenAdminUsers?: () => void;
   onOpenAuth: () => void;
   onOpenPricing: () => void;
   onOpenSuggestion: () => void;
@@ -37,6 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSearchChange,
   onOpenCreate,
   onOpenDashboard,
+  onOpenAdminUsers,
   onOpenAuth,
   onOpenPricing,
   onOpenSuggestion,
@@ -147,6 +150,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <ShieldCheck className="w-4 h-4 text-prairie-600" />
                 <span>Dashboard</span>
+              </button>
+            )}
+
+            {/* Admin User Management Button */}
+            {isAdmin && onOpenAdminUsers && (
+              <button
+                onClick={onOpenAdminUsers}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-700 text-xs font-bold text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 min-h-[44px] transition-colors shadow-sm"
+                title="Manage users, reset passwords & grant Pro testing licenses"
+              >
+                <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span>Manage Users</span>
               </button>
             )}
 
