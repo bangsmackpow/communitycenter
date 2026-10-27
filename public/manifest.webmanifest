@@ -1,0 +1,19 @@
+{
+  "name": "Southwest Iowa Community",
+  "short_name": "SW Iowa Hub",
+  "description": "Southwest Iowa Community Directory - Rentals, Contractors, and Local Events",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e293b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["lifestyle", "utilities", "social"]
+}
