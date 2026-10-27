@@ -2,9 +2,13 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { drizzle } from 'drizzle-orm/d1';
+import { eq, and, sql } from 'drizzle-orm';
 import * as schema from '../db/schema';
 import type { AppContext } from './types';
 import { createAuth } from './auth';
+import { authRoutes } from './routes/auth';
+import { adminRoutes } from './routes/admin';
+import { billingRoutes } from './routes/billing';
 import { listingRoutes } from './routes/listings';
 import { mediaRoutes } from './routes/media';
 import { eventRoutes } from './routes/events';
@@ -23,47 +27,81 @@ app.use('*', cors({
   allowHeaders: ['Content-Type', 'Authorization', 'Cookie'],
 }));
 
-// Setup Drizzle ORM and Better Auth in request context
+// Setup Drizzle ORM and Authenticated Session in request context
 app.use('*', async (c, next) => {
   if (c.env?.DB) {
     const db = drizzle(c.env.DB, { schema });
     c.set('db', db);
 
-    // Initialize auth instance
-    const auth = createAuth(db, {
-      BETTER_AUTH_SECRET: c.env.BETTER_AUTH_SECRET,
-      BETTER_AUTH_URL: c.env.BETTER_AUTH_URL,
-      GOOGLE_CLIENT_ID: c.env.GOOGLE_CLIENT_ID,
-      GOOGLE_CLIENT_SECRET: c.env.GOOGLE_CLIENT_SECRET,
-      FACEBOOK_CLIENT_ID: c.env.FACEBOOK_CLIENT_ID,
-      FACEBOOK_CLIENT_SECRET: c.env.FACEBOOK_CLIENT_SECRET,
-    });
+    // 1. Check session via cookie sw_session or Authorization header
+    const cookie = c.req.header('cookie') || '';
+    const match = cookie.match(/sw_session=([^;]+)/);
+    const authHeader = c.req.header('authorization');
+    const token = match?.[1] || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null);
 
-    // Check session if Authorization header or cookie present
-    try {
-      const session = await auth.api.getSession({
-        headers: c.req.raw.headers,
-      });
-      if (session) {
-        const currentUser = session.user as any;
-        // Ensure curtis@builtnetworks.com has admin and pro tier automatically
-        if (currentUser.email === 'curtis@builtnetworks.com') {
-          currentUser.role = 'admin';
-          currentUser.tier = 'pro_annual';
+    if (token) {
+      try {
+        const session = await db
+          .select()
+          .from(schema.sessions)
+          .where(and(eq(schema.sessions.token, token), sql`${schema.sessions.expiresAt} > unixepoch()`))
+          .get();
+
+        if (session) {
+          const user = await db
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.id, session.userId))
+            .get();
+
+          if (user) {
+            // Curtis always has admin role and pro_annual tier
+            if (user.email === 'curtis@builtnetworks.com') {
+              user.role = 'admin';
+              user.tier = 'pro_annual';
+            }
+            c.set('user', user);
+            c.set('session', session);
+          }
         }
-        c.set('user', currentUser);
-        c.set('session', session.session as any);
+      } catch (err) {
+        // Fallback to Better Auth session if any
       }
-    } catch {
-      // Session extraction optional for public requests
+    }
+
+    // 2. Also support Better Auth session token if present
+    if (!c.get('user')) {
+      try {
+        const auth = createAuth(db, {
+          BETTER_AUTH_SECRET: c.env.BETTER_AUTH_SECRET,
+          BETTER_AUTH_URL: c.env.BETTER_AUTH_URL,
+          GOOGLE_CLIENT_ID: c.env.GOOGLE_CLIENT_ID,
+          GOOGLE_CLIENT_SECRET: c.env.GOOGLE_CLIENT_SECRET,
+          FACEBOOK_CLIENT_ID: c.env.FACEBOOK_CLIENT_ID,
+          FACEBOOK_CLIENT_SECRET: c.env.FACEBOOK_CLIENT_SECRET,
+        });
+
+        const betterSession = await auth.api.getSession({
+          headers: c.req.raw.headers,
+        });
+        if (betterSession) {
+          const currentUser = betterSession.user as any;
+          if (currentUser.email === 'curtis@builtnetworks.com') {
+            currentUser.role = 'admin';
+            currentUser.tier = 'pro_annual';
+          }
+          c.set('user', currentUser);
+          c.set('session', betterSession.session as any);
+        }
+      } catch {}
     }
   }
 
   await next();
 });
 
-// Better Auth endpoint handler (Google, Facebook, Email/Password)
-app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
+// Better Auth endpoint handler (Google, Facebook, OAuth handlers)
+app.on(['POST', 'GET'], '/api/auth/social/*', async (c) => {
   const db = c.get('db');
   if (!db) {
     return c.json({ error: 'Database binding unavailable' }, 503);
@@ -79,25 +117,10 @@ app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
   return auth.handler(c.req.raw);
 });
 
-// Quick endpoint to get current authenticated user status
-app.get('/api/auth/me', (c) => {
-  const user = c.get('user');
-  if (!user) {
-    return c.json({ user: null });
-  }
-  return c.json({
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      tier: (user as any).tier || 'free',
-      image: user.image,
-    },
-  });
-});
-
 // API Routes
+app.route('/api/auth', authRoutes);
+app.route('/api/admin', adminRoutes);
+app.route('/api/billing', billingRoutes);
 app.route('/api/listings', listingRoutes);
 app.route('/api/media', mediaRoutes);
 app.route('/api/events', eventRoutes);

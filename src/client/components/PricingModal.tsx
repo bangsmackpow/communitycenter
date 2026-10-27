@@ -1,23 +1,62 @@
 import React, { useState } from 'react';
-import { X, Check, Sparkles, Shield, Zap, AlertCircle } from 'lucide-react';
+import { X, Check, Sparkles, Shield, Zap, AlertCircle, CreditCard, Loader2 } from 'lucide-react';
 import type { BillingTier } from '../types';
 
 interface PricingModalProps {
   isOpen: boolean;
   currentTier: BillingTier;
   onClose: () => void;
-  onUpgrade: (tier: 'pro_monthly' | 'pro_annual') => void;
+  onUpgradeSuccess: (tier: 'pro_monthly' | 'pro_annual') => void;
 }
 
 export const PricingModal: React.FC<PricingModalProps> = ({
   isOpen,
   currentTier,
   onClose,
-  onUpgrade,
+  onUpgradeSuccess,
 }) => {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleCheckout = async () => {
+    setLoading(true);
+    setError(null);
+
+    const selectedTier = billingCycle === 'annual' ? 'pro_annual' : 'pro_monthly';
+
+    try {
+      const res = await fetch('/api/billing/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: selectedTier }),
+      });
+
+      const data = await res.json() as any;
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Checkout session failed.');
+      }
+
+      // If Stripe Checkout URL returned, redirect to Stripe
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      // If in sandbox / testing mode
+      if (data.mockUpgraded) {
+        onUpgradeSuccess(selectedTier);
+        onClose();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Payment provider error.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
@@ -31,21 +70,21 @@ export const PricingModal: React.FC<PricingModalProps> = ({
         </button>
 
         <div className="text-center max-w-lg mx-auto mb-6">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-prairie-100 dark:bg-prairie-900/60 text-prairie-700 dark:text-prairie-300 text-xs font-bold uppercase tracking-wider mb-2 border border-prairie-200 dark:border-prairie-700/50">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Community Directory Plans</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-prairie-100 dark:bg-prairie-900/60 text-prairie-800 dark:text-prairie-300 text-xs font-bold uppercase tracking-wider mb-2 border border-prairie-200 dark:border-prairie-700/50">
+            <CreditCard className="w-3.5 h-3.5 text-prairie-600" />
+            <span>Secure Stripe Billing</span>
           </div>
           <h2 className="text-2xl font-black tracking-tight">
-            Simple, Transparent Southwest Iowa Tiers
+            Southwest Iowa Community Pro
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Free for individual neighbors and occasional community listings. High-impact Pro tools for active landlords and local service contractors.
+            Free for individual residents. High-impact Pro tools for active landlords and local service contractors.
           </p>
 
           {/* Billing Cycle Switch */}
           <div className="flex items-center justify-center gap-3 mt-4">
-            <span className={`text-xs font-semibold ${billingCycle === 'monthly' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
-              Monthly
+            <span className={`text-xs font-bold ${billingCycle === 'monthly' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+              Monthly ($10/mo)
             </span>
             <button
               type="button"
@@ -58,19 +97,26 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                 }`}
               />
             </button>
-            <span className={`text-xs font-semibold flex items-center gap-1 ${billingCycle === 'annual' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
-              <span>Annual</span>
-              <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-1.5 py-0.2 rounded-full border border-emerald-300 dark:border-emerald-700">
+            <span className={`text-xs font-bold flex items-center gap-1 ${billingCycle === 'annual' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+              <span>Annual ($100/yr)</span>
+              <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-black px-1.5 py-0.2 rounded-full border border-emerald-300 dark:border-emerald-700">
                 Save $20/yr
               </span>
             </span>
           </div>
         </div>
 
+        {error && (
+          <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-2xl text-rose-700 dark:text-rose-200 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Pricing Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Free Tier Card */}
-          <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex flex-col justify-between bg-slate-50/50 dark:bg-slate-850/50">
+          <div className="border border-slate-200 dark:border-slate-800 rounded-3xl p-5 flex flex-col justify-between bg-slate-50/50 dark:bg-slate-850/50">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300">Free Community</h3>
@@ -109,15 +155,15 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
             <div className="mt-6 pt-3 border-t border-slate-200 dark:border-slate-800">
               <span className="block text-center text-xs font-semibold text-slate-400">
-                Included automatically with all accounts
+                Included with every registered account
               </span>
             </div>
           </div>
 
           {/* Pro Tier Card */}
-          <div className="border-2 border-prairie-500 rounded-2xl p-5 flex flex-col justify-between bg-prairie-50/20 dark:bg-prairie-950/20 relative shadow-lg">
+          <div className="border-2 border-prairie-500 rounded-3xl p-5 flex flex-col justify-between bg-prairie-50/20 dark:bg-prairie-950/20 relative shadow-lg">
             <div className="absolute -top-3 right-4 bg-prairie-600 text-white font-black text-[10px] tracking-wide uppercase px-2.5 py-0.5 rounded-full shadow">
-              Most Popular
+              Stripe Verified
             </div>
 
             <div>
@@ -160,23 +206,27 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   <Check className="w-4 h-4 text-prairie-600 flex-shrink-0" />
                   <span>Up to 8 high-resolution photos per post</span>
                 </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-prairie-600 flex-shrink-0" />
-                  <span>Direct website & social media backlinks</span>
-                </li>
               </ul>
             </div>
 
             <div className="mt-6">
               <button
                 type="button"
-                onClick={() => {
-                  onUpgrade(billingCycle === 'annual' ? 'pro_annual' : 'pro_monthly');
-                  onClose();
-                }}
-                className="w-full bg-prairie-600 hover:bg-prairie-500 text-white font-bold py-3 rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 min-h-[44px]"
+                disabled={loading}
+                onClick={handleCheckout}
+                className="w-full bg-prairie-600 hover:bg-prairie-500 text-white font-black py-3.5 rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
               >
-                <span>Upgrade to Pro ({billingCycle === 'annual' ? '$100/yr' : '$10/mo'})</span>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Connecting to Stripe...</span>
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="w-4 h-4" />
+                    <span>Checkout with Stripe ({billingCycle === 'annual' ? '$100/yr' : '$10/mo'})</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

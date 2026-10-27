@@ -35,7 +35,7 @@ export const App: React.FC = () => {
     return false; // Default: Light mode
   });
 
-  // Current User (Defaults to Curtis admin on first visit so admin is seeded and ready)
+  // Real Authentication: Default is GUEST (null) so shared links do NOT log anyone in as Curtis!
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('auth_user');
@@ -44,18 +44,8 @@ export const App: React.FC = () => {
           return JSON.parse(saved);
         } catch {}
       }
-      // Initial default: Seed Curtis as Admin of the whole site
-      const adminCurtis: UserProfile = {
-        id: 'admin-curtis',
-        name: 'Curtis',
-        email: 'curtis@builtnetworks.com',
-        role: 'admin',
-        tier: 'pro_annual',
-      };
-      localStorage.setItem('auth_user', JSON.stringify(adminCurtis));
-      return adminCurtis;
     }
-    return null;
+    return null; // Guest by default
   });
 
   const showToast = (msg: string) => {
@@ -78,6 +68,19 @@ export const App: React.FC = () => {
     setIsDarkMode((prev) => !prev);
   };
 
+  // Check live session from edge API on mount
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => res.json())
+      .then((data: any) => {
+        if (data?.user) {
+          setCurrentUser(data.user);
+          localStorage.setItem('auth_user', JSON.stringify(data.user));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Fetch live listings from Edge API if available
   useEffect(() => {
     const fetchListings = async () => {
@@ -94,6 +97,18 @@ export const App: React.FC = () => {
       }
     };
     fetchListings();
+  }, []);
+
+  // Check for Stripe return URL params
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('upgraded') === 'true') {
+        showToast('Stripe payment verified! Your account is now Pro.');
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
   }, []);
 
   // Sync selected town to filters
@@ -202,9 +217,7 @@ export const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fullListing),
       });
-    } catch {
-      // Local state fallback
-    }
+    } catch {}
 
     setListings((prev) => [fullListing, ...prev]);
     showToast('Listing published successfully for Southwest Iowa!');
@@ -217,7 +230,6 @@ export const App: React.FC = () => {
     const listing = listings.find((l) => l.id === listingId);
     if (!listing) return;
 
-    // Security check: only admin or the listing creator can toggle status
     if (currentUser && currentUser.role !== 'admin' && listing.userId !== currentUser.id) {
       showToast('Permission denied: You do not own this listing.');
       return;
@@ -269,7 +281,7 @@ export const App: React.FC = () => {
     showToast('Thank you. This listing has been flagged for community safety review.');
   };
 
-  const handleUpgradeTier = (tier: 'pro_monthly' | 'pro_annual') => {
+  const handleUpgradeSuccess = (tier: 'pro_monthly' | 'pro_annual') => {
     if (currentUser) {
       const updated: UserProfile = { ...currentUser, tier };
       setCurrentUser(updated);
@@ -280,9 +292,16 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('sw_session_token');
     setCurrentUser(null);
+    if (currentView === 'dashboard') {
+      setCurrentView('feed');
+    }
     showToast('Signed out of Southwest Iowa Hub');
   };
 
@@ -386,7 +405,7 @@ export const App: React.FC = () => {
       {/* Mobile Bottom Dock Navigation */}
       <BottomNav activeTab={activeBottomTab} onSelectTab={handleBottomTab} />
 
-      {/* Auth Modal (Login / Register / Social OAuth) */}
+      {/* Auth Modal (Login / Register / Edge Authentication) */}
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
@@ -396,12 +415,12 @@ export const App: React.FC = () => {
         }}
       />
 
-      {/* Pricing Modal ($10/mo or $100/yr Pro Tier) */}
+      {/* Pricing Modal ($10/mo or $100/yr Pro Tier with Stripe) */}
       <PricingModal
         isOpen={isPricingOpen}
         currentTier={currentUser?.tier || 'free'}
         onClose={() => setIsPricingOpen(false)}
-        onUpgrade={handleUpgradeTier}
+        onUpgradeSuccess={handleUpgradeSuccess}
       />
 
       {/* Community Suggestion / Edit Modal */}
