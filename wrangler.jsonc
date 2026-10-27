@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "southwest-iowa-community",
+  "account_id": "0e528c886015cce349076fb7db222a88",
   "compatibility_date": "2025-02-24",
   "compatibility_flags": ["nodejs_compat"],
   "pages_build_output_dir": "./dist",
@@ -8,7 +9,7 @@
     {
       "binding": "DB",
       "database_name": "southwest-iowa-db",
-      "database_id": "southwest-iowa-local-db-placeholder",
+      "database_id": "51b6cf8c-abf4-4f54-a546-2234b44dff35",
       "migrations_dir": "drizzle/migrations"
     }
   ],
