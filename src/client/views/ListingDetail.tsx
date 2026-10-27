@@ -18,6 +18,12 @@ import {
   Flag,
   Edit3,
   Sparkles,
+  Mail,
+  X,
+  Send,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import type { Listing, UserProfile } from '../types';
 import { ScamWarningBanner } from '../components/ScamWarningBanner';
@@ -42,6 +48,88 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [copiedShare, setCopiedShare] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
+
+  // Inquiry Modal State
+  const [isInquiryOpen, setIsInquiryOpen] = useState(false);
+  const [inquiryName, setInquiryName] = useState(currentUser?.name || '');
+  const [inquiryEmail, setInquiryEmail] = useState(currentUser?.email || '');
+  const [inquiryPhone, setInquiryPhone] = useState('');
+  const [inquiryMessage, setInquiryMessage] = useState(
+    listing.categoryType === 'rental'
+      ? `Hi, I am interested in your rental "${listing.title}" in ${listing.town}, IA. Is it still available? I would like to schedule a viewing.`
+      : listing.categoryType === 'service'
+      ? `Hi, I saw your service "${listing.title}" on Southwest Iowa Community Central and would like to request a quote / estimate.`
+      : `Hi, I have a question regarding "${listing.title}".`
+  );
+  const [inquirySubmitting, setInquirySubmitting] = useState(false);
+  const [inquirySuccess, setInquirySuccess] = useState<string | null>(null);
+
+  // Report Modal State
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<'scam' | 'outdated' | 'duplicate' | 'inappropriate'>('scam');
+  const [reportNotes, setReportNotes] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportFeedback, setReportFeedback] = useState<string | null>(null);
+
+  const handleReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setReportSubmitting(true);
+    setReportFeedback(null);
+    try {
+      const res = await fetch(`/api/listings/${listing.id}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reportReason, notes: reportNotes.trim() || undefined }),
+      });
+      const data = (await res.json()) as any;
+      if (res.ok) {
+        setReportFeedback(data.message || 'Report submitted for safety review.');
+        setTimeout(() => {
+          setIsReportOpen(false);
+          setReportFeedback(null);
+          setReportNotes('');
+        }, 2500);
+      } else {
+        setReportFeedback(data.error || 'Failed to submit report');
+      }
+    } catch {
+      setReportFeedback('Network error submitting report');
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
+  const handleInquirySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInquirySubmitting(true);
+    setInquirySuccess(null);
+    try {
+      const res = await fetch(`/api/listings/${listing.id}/inquire`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderName: inquiryName.trim(),
+          senderEmail: inquiryEmail.trim(),
+          senderPhone: inquiryPhone.trim() || undefined,
+          message: inquiryMessage.trim(),
+        }),
+      });
+      const data = (await res.json()) as any;
+      if (res.ok) {
+        setInquirySuccess(data.message || 'Inquiry sent successfully!');
+        setTimeout(() => {
+          setIsInquiryOpen(false);
+          setInquirySuccess(null);
+        }, 3000);
+      } else {
+        setInquirySuccess(data.error || 'Failed to send inquiry');
+      }
+    } catch {
+      setInquirySuccess('Network error submitting inquiry');
+    } finally {
+      setInquirySubmitting(false);
+    }
+  };
 
   const mediaList =
     listing.media && listing.media.length > 0
@@ -166,9 +254,9 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({
 
           {/* Report Button */}
           <button
-            onClick={() => onReport(listing.id)}
+            onClick={() => setIsReportOpen(true)}
             className="text-slate-400 hover:text-rose-500 p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors border border-slate-200 dark:border-slate-700"
-            title="Report this listing"
+            title="Report this listing for scam, fraud or safety review"
             aria-label="Report listing"
           >
             <Flag className="w-4 h-4" />
@@ -269,30 +357,38 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({
           </p>
         )}
 
-        {/* Direct Action Dock: Call Now & Text SMS */}
-        <div className="grid grid-cols-2 gap-3 my-5 p-3.5 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/70 rounded-2xl">
-          {listing.contactPhone ? (
-            <>
-              <a
-                href={`tel:${listing.contactPhone}`}
-                className="bg-prairie-600 hover:bg-prairie-500 text-white font-bold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 min-h-[48px] shadow-sm transition-all active:scale-95 text-center"
-              >
-                <Phone className="w-4 h-4" />
-                <span>Call Now</span>
-              </a>
-              <a
-                href={`sms:${listing.contactPhone}?body=Hello, I am inquiring about your listing "${listing.title}" on Southwest Iowa Community Central:`}
-                className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 min-h-[48px] shadow-sm transition-all active:scale-95 text-center"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Text SMS</span>
-              </a>
-            </>
-          ) : (
-            <div className="col-span-2 text-center text-xs text-slate-500 py-1 font-medium">
-              Contact: {listing.contactEmail || 'Available via platform message'}
-            </div>
-          )}
+        {/* Direct Action Dock: Call Now, Text SMS, or Inquire Online */}
+        <div className="my-5 p-3.5 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/70 rounded-2xl space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {listing.contactPhone && (
+              <>
+                <a
+                  href={`tel:${listing.contactPhone}`}
+                  className="bg-prairie-600 hover:bg-prairie-500 text-white font-bold text-xs sm:text-sm py-3 px-3 rounded-xl flex items-center justify-center gap-2 min-h-[48px] shadow-sm transition-all active:scale-95 text-center"
+                >
+                  <Phone className="w-4 h-4" />
+                  <span>Call {listing.contactPhone}</span>
+                </a>
+                <a
+                  href={`sms:${listing.contactPhone}?body=Hello, I am inquiring about your listing "${listing.title}" on Southwest Iowa Community Central:`}
+                  className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs sm:text-sm py-3 px-3 rounded-xl flex items-center justify-center gap-2 min-h-[48px] shadow-sm transition-all active:scale-95 text-center"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Text SMS</span>
+                </a>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsInquiryOpen(true)}
+              className={`${
+                listing.contactPhone ? '' : 'sm:col-span-3'
+              } bg-prairie-700 hover:bg-prairie-600 text-white font-bold text-xs sm:text-sm py-3 px-3 rounded-xl flex items-center justify-center gap-2 min-h-[48px] shadow-sm transition-all active:scale-95 text-center`}
+            >
+              <Mail className="w-4 h-4" />
+              <span>{isRental ? 'Inquire / View' : isService ? 'Request Free Quote' : 'Message Organizer'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Rental Specific Specifications */}
@@ -451,6 +547,217 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({
           <span>Verified Southwest Iowa Community Directory</span>
         </div>
       </div>
+
+      {/* Online Inquiry / Direct Message Modal */}
+      {isInquiryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg p-5 sm:p-7 shadow-2xl relative text-slate-800 dark:text-slate-100 my-6">
+            <button
+              onClick={() => setIsInquiryOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-4">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-prairie-600 dark:text-prairie-400">
+                Direct Contact
+              </span>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                {isRental ? 'Inquire About Rental' : isService ? 'Request Free Estimate' : 'Contact Organizer'}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Your message will be delivered directly to the owner/contact for <strong>"{listing.title}"</strong>.
+              </p>
+            </div>
+
+            {inquirySuccess ? (
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs text-emerald-800 dark:text-emerald-200 font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <span>{inquirySuccess}</span>
+              </div>
+            ) : (
+              <form onSubmit={handleInquirySubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Your Full Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John Miller"
+                    value={inquiryName}
+                    onChange={(e) => setInquiryName(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs min-h-[44px] focus:border-prairie-500 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="you@example.com"
+                      value={inquiryEmail}
+                      onChange={(e) => setInquiryEmail(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs min-h-[44px] focus:border-prairie-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Phone Number (Optional)
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="641-xxx-xxxx"
+                      value={inquiryPhone}
+                      onChange={(e) => setInquiryPhone(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs min-h-[44px] focus:border-prairie-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Message
+                  </label>
+                  <textarea
+                    rows={4}
+                    required
+                    value={inquiryMessage}
+                    onChange={(e) => setInquiryMessage(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs focus:border-prairie-500 outline-none resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="submit"
+                    disabled={inquirySubmitting}
+                    className="flex-1 bg-prairie-600 hover:bg-prairie-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 min-h-[44px] shadow-sm transition-all"
+                  >
+                    {inquirySubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Sending message...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>Send Message</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsInquiryOpen(false)}
+                    className="px-4 py-3 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 min-h-[44px]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Safety Report / Scam Flag Modal */}
+      {isReportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-5 sm:p-7 shadow-2xl relative text-slate-800 dark:text-slate-100 my-6">
+            <button
+              onClick={() => setIsReportOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-2">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                Flag Listing for Review
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Help protect Southwest Iowa neighbors from rental wire-transfer fraud, outdated units, or abusive postings.
+              </p>
+            </div>
+
+            {reportFeedback ? (
+              <div className="p-4 bg-prairie-50 dark:bg-prairie-950/50 border border-prairie-200 dark:border-prairie-800 rounded-2xl text-xs text-prairie-800 dark:text-prairie-200 font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-prairie-600 flex-shrink-0" />
+                <span>{reportFeedback}</span>
+              </div>
+            ) : (
+              <form onSubmit={handleReportSubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Select Reason
+                  </label>
+                  <select
+                    value={reportReason}
+                    onChange={(e) => setReportReason(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs min-h-[44px] focus:border-prairie-500 outline-none"
+                  >
+                    <option value="scam">🚨 Potential Wire/Deposit Scam or Fraud</option>
+                    <option value="outdated">🕒 Outdated / Unit Already Rented</option>
+                    <option value="duplicate">📄 Duplicate Listing</option>
+                    <option value="inappropriate">⚠️ Inappropriate or Misleading Content</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Additional Details (Optional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Provide any context (e.g. landlord asked for gift cards or deposit before viewing)..."
+                    value={reportNotes}
+                    onChange={(e) => setReportNotes(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs focus:border-prairie-500 outline-none resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="submit"
+                    disabled={reportSubmitting}
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 min-h-[44px] shadow-sm transition-all"
+                  >
+                    {reportSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Flag className="w-4 h-4" />
+                        <span>Submit Safety Report</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsReportOpen(false)}
+                    className="px-4 py-3 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 min-h-[44px]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

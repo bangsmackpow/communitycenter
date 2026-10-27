@@ -10,6 +10,7 @@ import { Dashboard } from './views/Dashboard';
 import { AuthModal } from './components/AuthModal';
 import { PricingModal } from './components/PricingModal';
 import { SuggestionModal } from './components/SuggestionModal';
+import { Footer } from './components/Footer';
 
 export const App: React.FC = () => {
   const [listings, setListings] = useState<Listing[]>(INITIAL_SAMPLE_LISTINGS);
@@ -412,6 +413,12 @@ export const App: React.FC = () => {
           />
         )}
       </div>
+
+      {/* Legal, Fair Housing & Regional Footer */}
+      <Footer
+        onSelectTown={handleSelectTown}
+        onOpenPricing={() => setIsPricingOpen(true)}
+      />
 
       {/* Mobile Bottom Dock Navigation */}
       <BottomNav activeTab={activeBottomTab} onSelectTab={handleBottomTab} />

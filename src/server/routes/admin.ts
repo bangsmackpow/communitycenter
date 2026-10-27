@@ -143,3 +143,60 @@ adminRoutes.patch('/users/:id', zValidator('json', updateUserSchema), async (c) 
 
   return c.json({ success: true, message: 'User updated successfully.' });
 });
+
+// GET /api/admin/reports - View all safety flags and reported listings
+adminRoutes.get('/reports', async (c) => {
+  const db = c.get('db');
+
+  const reports = await db
+    .select({
+      id: schema.reportsAndFlags.id,
+      listingId: schema.reportsAndFlags.listingId,
+      reason: schema.reportsAndFlags.reason,
+      notes: schema.reportsAndFlags.notes,
+      status: schema.reportsAndFlags.status,
+      createdAt: schema.reportsAndFlags.createdAt,
+      listingTitle: schema.listings.title,
+      listingTown: schema.listings.town,
+      listingCategory: schema.listings.categoryType,
+      listingStatus: schema.listings.status,
+    })
+    .from(schema.reportsAndFlags)
+    .leftJoin(schema.listings, eq(schema.reportsAndFlags.listingId, schema.listings.id))
+    .orderBy(desc(schema.reportsAndFlags.createdAt));
+
+  return c.json({ reports });
+});
+
+// PATCH /api/admin/reports/:id - Resolve or dismiss flag
+const updateReportSchema = z.object({
+  status: z.enum(['open', 'resolved', 'dismissed']),
+});
+
+adminRoutes.patch('/reports/:id', zValidator('json', updateReportSchema), async (c) => {
+  const db = c.get('db');
+  const id = c.req.param('id');
+  const { status } = c.req.valid('json');
+
+  await db
+    .update(schema.reportsAndFlags)
+    .set({ status })
+    .where(eq(schema.reportsAndFlags.id, id));
+
+  return c.json({ success: true, message: `Report marked as ${status}.` });
+});
+
+// DELETE /api/admin/listings/:id - Admin take down spam / scam listing
+adminRoutes.delete('/listings/:id', async (c) => {
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  // Delete media first
+  await db.delete(schema.listingMedia).where(eq(schema.listingMedia.listingId, id));
+  // Delete reports
+  await db.delete(schema.reportsAndFlags).where(eq(schema.reportsAndFlags.listingId, id));
+  // Delete listing
+  await db.delete(schema.listings).where(eq(schema.listings.id, id));
+
+  return c.json({ success: true, message: 'Listing permanently removed from directory.' });
+});

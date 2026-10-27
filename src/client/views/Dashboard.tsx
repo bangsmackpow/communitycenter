@@ -20,13 +20,14 @@ import {
   Mail,
   Loader2,
   Gift,
+  AlertTriangle,
 } from 'lucide-react';
 import type { Listing, UserProfile, Suggestion } from '../types';
 
 interface DashboardProps {
   listings: Listing[];
   currentUser: UserProfile;
-  initialTab?: 'my' | 'admin_all' | 'suggestions' | 'users';
+  initialTab?: 'my' | 'admin_all' | 'suggestions' | 'users' | 'reports';
   onBack: () => void;
   onOpenCreate: () => void;
   onOpenPricing: () => void;
@@ -46,12 +47,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onDelete,
   onSelectListing,
 }) => {
-  const [activeTab, setActiveTab] = useState<'my' | 'admin_all' | 'suggestions' | 'users'>(
+  const [activeTab, setActiveTab] = useState<'my' | 'admin_all' | 'suggestions' | 'users' | 'reports'>(
     initialTab || 'my'
   );
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'rented'>('all');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  // Safety Reports / Flags State
+  const [reports, setReports] = useState<any[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
 
   useEffect(() => {
     if (initialTab) {
@@ -109,11 +114,52 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  const fetchReports = () => {
+    if (isAdmin) {
+      setLoadingReports(true);
+      fetch('/api/admin/reports')
+        .then((res) => res.json())
+        .then((data: any) => {
+          if (data?.reports) setReports(data.reports);
+        })
+        .catch(() => {})
+        .finally(() => setLoadingReports(false));
+    }
+  };
+
   useEffect(() => {
     if (isAdmin && activeTab === 'users') {
       fetchAdminUsers();
     }
+    if (isAdmin && activeTab === 'reports') {
+      fetchReports();
+    }
   }, [isAdmin, activeTab]);
+
+  const handleResolveReport = async (reportId: string, status: 'resolved' | 'dismissed') => {
+    try {
+      await fetch(`/api/admin/reports/${reportId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status } : r)));
+      setAdminFeedback(`Report marked as ${status}.`);
+      setTimeout(() => setAdminFeedback(null), 3000);
+    } catch {}
+  };
+
+  const handleAdminTakeDownListing = async (listingId: string, reportId?: string) => {
+    if (!confirm('Are you sure you want to permanently delete this listing from the directory?')) return;
+    try {
+      await fetch(`/api/admin/listings/${listingId}`, { method: 'DELETE' });
+      if (reportId) {
+        setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status: 'resolved' } : r)));
+      }
+      setAdminFeedback('Listing permanently removed from directory.');
+      setTimeout(() => setAdminFeedback(null), 3500);
+    } catch {}
+  };
 
   const handleUpdateSuggestionStatus = async (id: string, status: 'approved' | 'rejected') => {
     try {
@@ -296,6 +342,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
               >
                 <MessageSquarePlus className="w-3.5 h-3.5" />
                 <span>Suggestions</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('reports')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold min-h-[38px] transition-colors flex items-center gap-1.5 ${
+                  activeTab === 'reports'
+                    ? 'bg-rose-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                <span>Flagged Safety Queue ({reports.filter((r) => r.status === 'open').length})</span>
               </button>
             </>
           )}
@@ -544,6 +602,108 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 )}
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {/* TAB: FLAGGED SAFETY QUEUE (ADMIN ONLY) */}
+      {isAdmin && activeTab === 'reports' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-black text-slate-900 dark:text-white">
+                Flagged Scam & Safety Reports
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Community reports for suspected rental wire scams, outdated postings, or inappropriate content.
+              </p>
+            </div>
+            <button
+              onClick={fetchReports}
+              className="text-xs font-bold text-prairie-600 hover:underline"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {loadingReports ? (
+            <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-prairie-600" />
+              <span>Checking safety queue in Cloudflare D1...</span>
+            </div>
+          ) : reports.length === 0 ? (
+            <div className="p-8 text-center bg-white dark:bg-slate-800/40 rounded-3xl border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+              ✓ Clean safety record: No reports or flagged listings.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {reports.map((rep) => (
+                <div
+                  key={rep.id}
+                  className="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm text-slate-900 dark:text-slate-100"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
+                        {rep.reason}
+                      </span>
+                      <span className="text-xs font-bold">
+                        {rep.listingTitle || 'Untitled / Deleted Listing'}
+                      </span>
+                      {rep.listingTown && (
+                        <span className="text-[11px] text-slate-500">
+                          ({rep.listingTown}, IA)
+                        </span>
+                      )}
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          rep.status === 'open'
+                            ? 'bg-amber-100 text-amber-800'
+                            : rep.status === 'resolved'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {rep.status.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {rep.notes && (
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 italic">
+                        "{rep.notes}"
+                      </p>
+                    )}
+
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      Reported on {new Date(rep.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+
+                  {rep.status === 'open' && (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {rep.listingId && (
+                        <button
+                          type="button"
+                          onClick={() => handleAdminTakeDownListing(rep.listingId, rep.id)}
+                          className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 min-h-[38px] shadow-sm"
+                          title="Permanently remove this listing from the directory"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Take Down Listing</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleResolveReport(rep.id, 'dismissed')}
+                        className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold min-h-[38px]"
+                      >
+                        Dismiss Flag
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

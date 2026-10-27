@@ -130,6 +130,17 @@ export const reportsAndFlags = sqliteTable('reports_and_flags', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
+export const inquiries = sqliteTable('inquiries', {
+  id: text('id').primaryKey(),
+  listingId: text('listing_id').notNull().references(() => listings.id, { onDelete: 'cascade' }),
+  senderName: text('sender_name').notNull(),
+  senderEmail: text('sender_email').notNull(),
+  senderPhone: text('sender_phone'),
+  message: text('message').notNull(),
+  status: text('status', { enum: ['unread', 'read', 'archived'] }).notNull().default('unread'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+});
+
 export const suggestions = sqliteTable('suggestions', {
   id: text('id').primaryKey(),
   type: text('type', { enum: ['new_listing', 'edit_suggestion'] }).notNull(),
@@ -152,5 +163,7 @@ export type ListingMedia = typeof listingMedia.$inferSelect;
 export type InsertListingMedia = typeof listingMedia.$inferInsert;
 export type Category = typeof categories.$inferSelect;
 export type ReportAndFlag = typeof reportsAndFlags.$inferSelect;
+export type Inquiry = typeof inquiries.$inferSelect;
+export type InsertInquiry = typeof inquiries.$inferInsert;
 export type Suggestion = typeof suggestions.$inferSelect;
 export type InsertSuggestion = typeof suggestions.$inferInsert;

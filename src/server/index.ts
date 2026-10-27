@@ -137,4 +137,90 @@ app.get('/api/health', (c) => {
   });
 });
 
+// Dynamic robots.txt
+app.get('/robots.txt', (c) => {
+  const origin = new URL(c.req.url).origin;
+  const content = `User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+
+Sitemap: ${origin}/sitemap.xml
+`;
+  return c.text(content, 200, {
+    'Content-Type': 'text/plain',
+    'Cache-Control': 'public, max-age=86400',
+  });
+});
+
+// Dynamic sitemap.xml for Google, Bing & Southwest Iowa Local SEO
+app.get('/sitemap.xml', async (c) => {
+  const db = c.get('db');
+  const origin = new URL(c.req.url).origin;
+  const now = new Date().toISOString().split('T')[0];
+
+  let listingUrls = '';
+  if (db) {
+    try {
+      const activeListings = await db
+        .select({
+          id: schema.listings.id,
+          slug: schema.listings.slug,
+          updatedAt: schema.listings.updatedAt,
+        })
+        .from(schema.listings)
+        .where(eq(schema.listings.status, 'active'))
+        .limit(500);
+
+      listingUrls = activeListings
+        .map((l) => {
+          const mod = l.updatedAt
+            ? new Date(l.updatedAt).toISOString().split('T')[0]
+            : now;
+          return `  <url>
+    <loc>${origin}/listing/${l.slug || l.id}</loc>
+    <lastmod>${mod}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+        })
+        .join('\n');
+    } catch {}
+  }
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${origin}/</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${origin}/rentals</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>${origin}/services</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>${origin}/events</loc>
+    <lastmod>${now}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+${listingUrls}
+</urlset>`;
+
+  return c.text(xml, 200, {
+    'Content-Type': 'application/xml',
+    'Cache-Control': 'public, max-age=3600',
+  });
+});
+
 export default app;

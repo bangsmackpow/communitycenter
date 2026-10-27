@@ -24,6 +24,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   maxFiles = 6,
 }) => {
   const [compressing, setCompressing] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -31,6 +32,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     if (!files || files.length === 0) return;
 
     setCompressing(true);
+    setUploadStatus('Compressing images to WebP...');
     const newItems: UploadedMediaItem[] = [...mediaList];
 
     for (let i = 0; i < files.length; i++) {
@@ -39,21 +41,46 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
       try {
         const compressed = await compressImageToWebP(file, 1200, 0.85);
+        let r2Key: string | undefined;
+        let remoteUrl: string | undefined;
+
+        // Upload directly to Cloudflare R2 via Edge API
+        setUploadStatus(`Uploading ${file.name} to Cloudflare R2...`);
+        try {
+          const formData = new FormData();
+          formData.append('file', compressed.file, `${file.name.replace(/\.[^/.]+$/, '')}.webp`);
+          const uploadRes = await fetch('/api/media/upload', {
+            method: 'POST',
+            body: formData,
+          });
+          if (uploadRes.ok) {
+            const uploadData = (await uploadRes.json()) as any;
+            if (uploadData.url) {
+              remoteUrl = uploadData.url;
+              r2Key = uploadData.r2Key;
+            }
+          }
+        } catch (uploadErr) {
+          console.warn('R2 upload skipped or failed, using local fallback:', uploadErr);
+        }
+
         newItems.push({
           id: crypto.randomUUID(),
           file: compressed.file,
-          previewUrl: compressed.previewUrl,
-          url: compressed.previewUrl, // Default local preview until pushed to R2
+          previewUrl: remoteUrl || compressed.previewUrl,
+          url: remoteUrl || compressed.previewUrl,
+          r2Key: r2Key,
           originalSize: compressed.originalSize,
           compressedSize: compressed.compressedSize,
         });
       } catch (err) {
-        console.error('Compression failed for', file.name, err);
+        console.error('Processing failed for', file.name, err);
       }
     }
 
     onChange(newItems);
     setCompressing(false);
+    setUploadStatus(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -120,7 +147,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             {compressing ? (
               <>
                 <Loader2 className="w-5 h-5 text-prairie-400 animate-spin" />
-                <span className="text-[10px] text-slate-400 mt-1">Compressing...</span>
+                <span className="text-[10px] text-slate-400 mt-1">Processing...</span>
               </>
             ) : (
               <>
@@ -132,6 +159,13 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           </button>
         )}
       </div>
+
+      {uploadStatus && (
+        <div className="flex items-center gap-2 text-xs font-semibold text-prairie-600 dark:text-prairie-400 bg-prairie-50 dark:bg-prairie-950/40 p-2.5 rounded-xl border border-prairie-200 dark:border-prairie-800">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <span>{uploadStatus}</span>
+        </div>
+      )}
 
       <input
         ref={fileInputRef}

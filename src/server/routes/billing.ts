@@ -101,6 +101,64 @@ billingRoutes.post('/create-checkout-session', zValidator('json', createCheckout
   });
 });
 
+// POST /api/billing/create-portal-session - Stripe Customer Portal for managing subscriptions
+billingRoutes.post('/create-portal-session', async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Please log in to manage your subscription.' }, 401);
+  }
+
+  const stripeSecretKey = (c.env as any).STRIPE_SECRET_KEY;
+  const baseUrl = (c.env as any).BETTER_AUTH_URL || new URL(c.req.url).origin;
+
+  if (stripeSecretKey && stripeSecretKey.startsWith('sk_')) {
+    try {
+      // Find customer by email
+      const customerRes = await fetch(
+        `https://api.stripe.com/v1/customers?email=${encodeURIComponent(user.email)}&limit=1`,
+        {
+          headers: { Authorization: `Bearer ${stripeSecretKey}` },
+        }
+      );
+      const customerData = (await customerRes.json()) as any;
+      const customerId = customerData.data?.[0]?.id;
+
+      if (!customerId) {
+        return c.json({
+          error: 'No active Stripe billing customer found for this email address. Please contact support.',
+        }, 404);
+      }
+
+      // Create Billing Portal Session
+      const portalRes = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${stripeSecretKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          customer: customerId,
+          return_url: `${baseUrl}/`,
+        }).toString(),
+      });
+
+      const portalData = (await portalRes.json()) as any;
+      if (!portalRes.ok) {
+        throw new Error(portalData.error?.message || 'Failed to create billing portal session');
+      }
+
+      return c.json({ portalUrl: portalData.url });
+    } catch (err: any) {
+      return c.json({ error: err.message || 'Error opening billing portal' }, 500);
+    }
+  }
+
+  return c.json({
+    portalUrl: null,
+    message: 'Test mode: No Stripe key configured yet. Pro tier was granted via Sandbox/Admin license.',
+  });
+});
+
 // POST /api/billing/webhook - Stripe Webhook Handler
 billingRoutes.post('/webhook', async (c) => {
   const db = c.get('db');

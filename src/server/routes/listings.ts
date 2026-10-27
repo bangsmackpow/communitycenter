@@ -394,3 +394,116 @@ listingRoutes.delete('/:id', async (c) => {
 
   return c.json({ success: true, message: 'Listing archived' });
 });
+
+// POST /api/listings/:id/report - Public or authenticated scam / issue report
+const reportListingSchema = z.object({
+  reason: z.enum(['scam', 'outdated', 'duplicate', 'inappropriate']),
+  notes: z.string().max(1000).optional(),
+});
+
+listingRoutes.post('/:id/report', zValidator('json', reportListingSchema), async (c) => {
+  const db = c.get('db');
+  const id = c.req.param('id');
+  const body = c.req.valid('json');
+
+  const listing = await db
+    .select({ id: schema.listings.id, title: schema.listings.title })
+    .from(schema.listings)
+    .where(eq(schema.listings.id, id))
+    .get();
+
+  if (!listing) {
+    return c.json({ error: 'Listing not found' }, 404);
+  }
+
+  const reportId = crypto.randomUUID();
+  await db.insert(schema.reportsAndFlags).values({
+    id: reportId,
+    listingId: id,
+    reason: body.reason,
+    notes: body.notes || null,
+    status: 'open',
+    createdAt: new Date(),
+  });
+
+  return c.json({
+    success: true,
+    message: 'Thank you for keeping Southwest Iowa safe. Your report has been submitted to the safety moderation queue.',
+    reportId,
+  });
+});
+
+// POST /api/listings/:id/inquire - Direct inquiry to landlord / contractor
+const inquirySchema = z.object({
+  senderName: z.string().min(2).max(100),
+  senderEmail: z.string().email(),
+  senderPhone: z.string().max(25).optional(),
+  message: z.string().min(5).max(3000),
+});
+
+listingRoutes.post('/:id/inquire', zValidator('json', inquirySchema), async (c) => {
+  const db = c.get('db');
+  const id = c.req.param('id');
+  const body = c.req.valid('json');
+
+  const listing = await db
+    .select()
+    .from(schema.listings)
+    .where(eq(schema.listings.id, id))
+    .get();
+
+  if (!listing) {
+    return c.json({ error: 'Listing not found' }, 404);
+  }
+
+  const inquiryId = crypto.randomUUID();
+  await db.insert(schema.inquiries).values({
+    id: inquiryId,
+    listingId: id,
+    senderName: body.senderName.trim(),
+    senderEmail: body.senderEmail.toLowerCase().trim(),
+    senderPhone: body.senderPhone?.trim() || null,
+    message: body.message.trim(),
+    status: 'unread',
+    createdAt: new Date(),
+  });
+
+  return c.json({
+    success: true,
+    message: `Your inquiry has been sent to the listing contact (${listing.contactEmail || 'owner'}).`,
+    inquiryId,
+  });
+});
+
+// GET /api/listings/:id/inquiries - View inquiries for a listing (owner or admin only)
+listingRoutes.get('/:id/inquiries', async (c) => {
+  const db = c.get('db');
+  const user = c.get('user');
+  const id = c.req.param('id');
+
+  if (!user) {
+    return c.json({ error: 'Authentication required' }, 401);
+  }
+
+  const listing = await db
+    .select()
+    .from(schema.listings)
+    .where(eq(schema.listings.id, id))
+    .get();
+
+  if (!listing) {
+    return c.json({ error: 'Listing not found' }, 404);
+  }
+
+  if (user.role !== 'admin' && listing.userId !== user.id) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const items = await db
+    .select()
+    .from(schema.inquiries)
+    .where(eq(schema.inquiries.listingId, id))
+    .orderBy(desc(schema.inquiries.createdAt));
+
+  return c.json({ inquiries: items });
+});
