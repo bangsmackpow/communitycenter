@@ -17,9 +17,5 @@
       "binding": "BUCKET",
       "bucket_name": "southwest-iowa-assets"
     }
-  ],
-  "vars": {
-    "BETTER_AUTH_URL": "http://localhost:5173",
-    "BETTER_AUTH_SECRET": "southwest_iowa_dev_secret_key_edge_32chars_min"
-  }
+  ]
 }
