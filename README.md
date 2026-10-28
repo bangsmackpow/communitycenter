@@ -1,26 +1,58 @@
-# Southwest Iowa Community Platform
+# Southwest Iowa Community Central
 
-> Production-ready full-stack edge community directory web platform and PWA tailored for **Southwest Iowa** (Creston, Corning, Afton, Greenfield, Osceola, Red Oak, Shenandoah, Clarinda, Atlantic, Mount Ayr, Winterset, and surrounding communities).
+[![Cloudflare Pages](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-F38020?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
+[![D1 SQLite](https://img.shields.io/badge/Database-Cloudflare%20D1-orange?logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
+[![R2 Storage](https://img.shields.io/badge/Storage-Cloudflare%20R2-yellow?logo=amazons3&logoColor=white)](https://developers.cloudflare.com/r2/)
+[![Hono](https://img.shields.io/badge/API-Hono%20v4-E36002?logo=hono&logoColor=white)](https://hono.dev/)
+[![React](https://img.shields.io/badge/Frontend-React%2018%20%2B%20Tailwind-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Strict%20Mode-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-Connecting neighbors, rural renters, local service contractors, and community events on Cloudflare's Edge Runtime.
+> Production-ready, edge-native community directory web platform and PWA tailored for **Southwest Iowa** (Creston, Corning, Afton, Greenfield, Osceola, Red Oak, Shenandoah, Clarinda, Atlantic, Mount Ayr, Winterset, and surrounding communities).
+
+Connecting rural neighbors, property managers, independent trade contractors, and local community events on Cloudflare's Edge Runtime.
 
 ---
 
 ## 🌟 Key Features
 
-- **Edge Architecture:** Cloudflare Pages + Functions / Workers with Hono API.
-- **Database & Query Layer:** Cloudflare D1 (SQLite) with Drizzle ORM and automatic schema migrations.
-- **Object Storage:** Cloudflare R2 bucket (`southwest-iowa-assets`) with client-side WebP compression (< 1200px) before upload.
-- **Authentication:** Better Auth (supporting passwordless email magic links and Google OAuth) with SQLite/D1 session persistence.
-- **Progressive Web App (PWA):** `manifest.webmanifest` + Service Worker (`sw.js`) for offline caching and "Add to Home Screen" mobile experience.
-- **Mobile-First UX:**
-  - Sticky local town dropdown (Creston, Corning, Afton, Greenfield, Osceola, Red Oak, etc.).
-  - Bottom navigation dock (`Discover`, `Rentals`, `Services`, `Events`, `Post (+)`) with >=44px touch targets.
-  - 24/7 Emergency Service quick-pills (Snow Removal, Plumbing, Furnace Repair, Hauling).
-  - Anti-Scam safety alert banner on rental listings.
-  - Direct 1-tap `Call Now` (`tel:`) and `Text SMS` (`sms:`) buttons.
-  - `.ics` standard iCalendar export for community events.
-  - Owner & Contractor Dashboard to toggle units between "Rented" and "Available" without deleting posts.
+### 1. Real Edge Infrastructure
+- **Cloudflare Pages + Functions:** Globally distributed V8 edge compute with sub-millisecond cold starts.
+- **Cloudflare D1 (SQLite) + Drizzle ORM:** Serverless relational SQLite database at the edge with typed Drizzle queries and automatic migrations.
+- **Cloudflare R2 Object Storage (`southwest-iowa-assets`):** S3-compatible, zero-egress asset storage for listing photos with immutable edge caching.
+- **Client-Side WebP Compression:** Images are compressed and resized (< 1200px) in the browser before being uploaded directly to R2.
+
+### 2. Multi-Tier Business Model & Limiting Logic
+- **Free Community Tier:** Every verified resident, landlord, or local small business can post **1 active listing** for free.
+- **Pro Tier ($10/month or $100/year):**
+  - Unlimited active listings for property management firms and busy contractors.
+  - Top-of-feed featured badges and priority placement.
+  - 24/7 Emergency Dispatch pills (Snow Removal, Emergency Furnace/Plumbing Repair).
+  - Stripe Checkout integration with self-service Stripe Customer Portal.
+
+### 3. Authentication & User Management
+- **Guest-First Architecture:** Unauthenticated visitors start as clean guests (`currentUser = null`) with zero pre-filled test data.
+- **Edge Password Auth:** Secure PBKDF2 SHA-256 (100,000 iterations) native Web Crypto password hashing.
+- **OAuth Providers:** 1-click **Continue with Google** and **Continue with Facebook** authentication.
+- **Admin Management Console:**
+  - Dedicated **Manage Users** dashboard in the top navigation for administrators.
+  - Search any user by name or email.
+  - Reset any user's password directly on their behalf.
+  - Grant free 1-year Pro testing licenses ($100 value) to community testers with 1 click.
+
+### 4. Community Safety, Trust & Disclaimers
+- **Anti-Scam Alert Banners:** Displayed on all rental listings warning against wire-transfer and gift-card scams.
+- **Safety Report / Flagging Pipeline:** Users can report suspicious postings (`scam`, `outdated`, `duplicate`, `inappropriate`) with optional notes.
+- **Admin Moderation Queue:** Live queue in the dashboard allowing admins to review reports and permanently take down scam postings with one click.
+- **Equal Housing Opportunity Disclaimer:** Federal Fair Housing Act compliance disclaimers and policies in the footer.
+- **Contractor Licensure Disclaimer:** Explicit notices encouraging homeowners to verify contractor insurance and credentials.
+
+### 5. Localized Small-Town UX & Mobile PWA
+- **Sticky Town Selector:** Filter listings across Creston, Corning, Afton, Greenfield, Osceola, Red Oak, Shenandoah, Clarinda, Atlantic, Mount Ayr, Lenox, Bedford, Villisca, and Winterset.
+- **Direct 1-Tap Action Dock:** Native `Call Now` (`tel:`), `Text SMS` (`sms:`), and in-app **Online Inquiry** message dispatch.
+- **iCalendar Export:** Download `.ics` event files directly into Apple Calendar, Google Calendar, or Outlook for community benefits and sports.
+- **Community Suggestions:** Crowdsourcing tool allowing neighbors to suggest unlisted local businesses or propose edits to existing listings.
+- **Light & Dark Mode:** Light mode by default; dark mode selectable with persistent `localStorage` preference.
+- **PWA Ready:** Web App Manifest + Service Worker configured for "Add to Home Screen" on iOS and Android.
 
 ---
 
@@ -28,105 +60,130 @@ Connecting neighbors, rural renters, local service contractors, and community ev
 
 ```
 ├── drizzle/
-│   └── migrations/              # D1 SQL migrations generated via drizzle-kit
+│   └── migrations/              # Cloudflare D1 SQL migrations generated via drizzle-kit
 ├── functions/
 │   └── api/
-│       └── [[route]].ts         # Cloudflare Pages Functions edge routing adapter
+│       └── [[route]].ts         # Cloudflare Pages Functions adapter routing requests to Hono
 ├── public/
 │   ├── icon.svg                 # PWA vector app icon
 │   ├── manifest.webmanifest     # Standalone PWA web manifest
 │   └── sw.js                    # Service worker for offline static asset caching
 ├── src/
 │   ├── db/
-│   │   ├── constants.ts         # SW Iowa towns & default directory categories
-│   │   └── schema.ts            # Drizzle ORM schema (Better Auth + Listings + R2 Media)
+│   │   ├── constants.ts         # SW Iowa town lists & 14 default categories
+│   │   └── schema.ts            # Drizzle ORM SQLite schema (Users, Listings, Media, Reports, Inquiries)
 │   ├── server/
+│   │   ├── crypto.ts            # Edge Web Crypto PBKDF2 password hashing & verification
 │   │   ├── auth.ts              # Better Auth edge adapter for D1
-│   │   ├── types.ts             # Cloudflare D1 & R2 environment bindings
-│   │   ├── index.ts             # Main Hono edge app
+│   │   ├── types.ts             # Cloudflare D1 (DB) & R2 (BUCKET) bindings & AppContext
+│   │   ├── index.ts             # Main Hono app mounting all routes, health check, sitemap & robots
 │   │   └── routes/
-│   │       ├── categories.ts    # Category list & auto-seed
-│   │       ├── cron.ts          # 30-day listing expiration job
-│   │       ├── events.ts        # .ics calendar generator
-│   │       ├── listings.ts      # CRUD, filtering, pagination, Zod validation
-│   │       └── media.ts         # Direct R2 upload & image serving
+│   │       ├── admin.ts         # User management, password resets, Pro licenses & safety queue
+│   │       ├── auth.ts          # Register, login, session validation, Google/Facebook OAuth
+│   │       ├── billing.ts       # Stripe Checkout, Customer Portal & Webhook handlers
+│   │       ├── categories.ts    # Category retrieval & seeding
+│   │       ├── cron.ts          # 30-day listing expiration cleanup
+│   │       ├── events.ts        # .ics calendar generator for community events
+│   │       ├── listings.ts      # Listing CRUD, pagination, reports & online inquiries
+│   │       ├── media.ts         # Direct R2 file uploads & edge cached image serving
+│   │       └── suggestions.ts   # Crowdsourced business recommendations & edits
 │   └── client/
-│       ├── components/          # Navbar, BottomNav, ScamBanner, ImageUploader, ListingCard
+│       ├── components/          # Navbar, BottomNav, Footer, ScamBanner, AuthModal, PricingModal, etc.
 │       ├── views/               # HomeFeed, ListingDetail, CreateListingWizard, Dashboard
-│       ├── utils/               # HTML5 Canvas WebP downscale compressor (<1200px)
-│       ├── App.tsx              # Application layout & state controller
+│       ├── utils/               # HTML5 Canvas client-side WebP image downscaler (<1200px)
+│       ├── App.tsx              # Application layout controller & routing state
+│       ├── sampleData.ts        # Fallback starter data
 │       └── main.tsx             # React entry point
-├── drizzle.config.ts            # Drizzle Kit configuration for Cloudflare D1
-├── tailwind.config.js           # Custom prairie palette & accessible touch target settings
+├── drizzle.config.ts            # Drizzle Kit configuration for Cloudflare D1 SQLite
+├── seed_remote.sql              # Remote D1 seed script for categories, users, listings & media
 ├── wrangler.jsonc               # Cloudflare bindings (D1: DB, R2: BUCKET, nodejs_compat)
-└── vite.config.ts               # Vite build configuration
+└── vite.config.ts               # Vite configuration
 ```
 
 ---
 
 ## 🚀 Local Development
 
-### 1. Install dependencies
+### 1. Install Dependencies
 ```bash
 npm install
 ```
 
-### 2. Start Vite frontend dev server
+### 2. Start Vite Frontend Server
 ```bash
 npm run dev
 ```
 
-### 3. Generate D1 schema migrations
+### 3. TypeScript Typecheck
 ```bash
-npm run db:generate
+npm run typecheck
 ```
 
-### 4. Run local Cloudflare Pages environment (with live D1 & R2 emulation)
+### 4. Build for Production
 ```bash
 npm run build
-npm run pages:dev
 ```
 
 ---
 
-## ☁️ Cloudflare Pages & Git Deployment
+## ☁️ Cloudflare Pages & Deployment Guide
 
-### Step 1: Create Cloudflare D1 Database & R2 Bucket
-Run the following Wrangler commands in your terminal:
+The application is deployed on Cloudflare Pages connected to your GitHub repository (`bangsmackpow/communitycenter`).
 
+### 1. Cloudflare D1 Database Binding
+In the Cloudflare Dashboard under **Pages > Your Project > Settings > Functions > D1 database bindings**:
+- **Variable name:** `DB`
+- **D1 Database:** `southwest-iowa-db` (`51b6cf8c-abf4-4f54-a546-2234b44dff35`)
+
+### 2. Cloudflare R2 Bucket Binding
+In the Cloudflare Dashboard under **Pages > Your Project > Settings > Functions > R2 bucket bindings**:
+- **Variable name:** `BUCKET`
+- **R2 Bucket:** `southwest-iowa-assets`
+
+### 3. Environment Variables
+Add the following in **Pages > Settings > Environment variables**:
+
+| Variable Name | Description | Example / Source |
+| :--- | :--- | :--- |
+| `BETTER_AUTH_SECRET` | 32+ character random secret string | `southwest_iowa_dev_secret_key_edge_32chars_min` |
+| `BETTER_AUTH_URL` | Production website base URL | `https://communitycenter.pages.dev` |
+| `GOOGLE_CLIENT_ID` | Google OAuth Web Client ID | From [Google Cloud Console](https://console.cloud.google.com/) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret | From Google Cloud Console |
+| `FACEBOOK_CLIENT_ID` | Meta / Facebook App ID | From [Meta for Developers](https://developers.facebook.com/) |
+| `FACEBOOK_CLIENT_SECRET`| Meta / Facebook App Secret | From Meta for Developers |
+| `STRIPE_SECRET_KEY` | Stripe Secret API Key | `sk_live_...` or `sk_test_...` from [Stripe](https://dashboard.stripe.com/) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Webhook Signing Secret | `whsec_...` from Stripe Webhooks |
+
+---
+
+## 🔑 Default Administrator Credentials
+
+Once logged in with this account, you will have global administrative privileges, including the **Manage Users** dashboard, password resets, license granting, and the safety report takedown queue:
+
+- **Email:** `curtis@builtnetworks.com`
+- **Password:** `[REDACTED_PASSWORD_SEC]`
+- **Role:** `admin`
+- **Tier:** `pro_annual` (Unlimited active listings + featured placement)
+
+---
+
+## 🗄️ Database Management & Seeding
+
+### Execute Migrations Against Remote D1:
 ```bash
-# 1. Create D1 Database
-npx wrangler d1 create southwest-iowa-db
-
-# 2. Create R2 Storage Bucket
-npx wrangler r2 bucket create southwest-iowa-assets
+$env:CLOUDFLARE_ACCOUNT_ID="0e528c886015cce349076fb7db222a88"
+npx wrangler d1 execute southwest-iowa-db --remote --file=./drizzle/migrations/0002_mushy_fenris.sql
 ```
 
-Copy the generated `database_id` into `wrangler.jsonc`.
-
-### Step 2: Apply D1 Database Migrations
+### Seed Authentic Southwest Iowa Starter Data:
 ```bash
-# Apply migration to remote production D1
-npm run db:migrate:remote
+$env:CLOUDFLARE_ACCOUNT_ID="0e528c886015cce349076fb7db222a88"
+npx wrangler d1 execute southwest-iowa-db --remote --file=./seed_remote.sql
 ```
 
-### Step 3: Push to GitHub & Connect to Cloudflare Pages
-1. Push your repository to GitHub:
-   ```bash
-   git remote add origin https://github.com/<your-username>/southwest-iowa-community.git
-   git branch -M main
-   git push -u origin main
-   ```
-2. In the **Cloudflare Dashboard**:
-   - Go to **Workers & Pages** > **Create application** > **Pages** > **Connect to Git**.
-   - Select your repository.
-   - Set build preset to **Vite**:
-     - **Build command:** `npm run build`
-     - **Build output directory:** `dist`
-   - In **Settings** > **Bindings**:
-     - Add **D1 database binding**: Variable name `DB`, select `southwest-iowa-db`.
-     - Add **R2 bucket binding**: Variable name `BUCKET`, select `southwest-iowa-assets`.
-     - Add **Environment Variables**:
-       - `BETTER_AUTH_SECRET`: Generate a secure 32+ character key.
-       - `BETTER_AUTH_URL`: `https://your-domain.pages.dev`
-3. Click **Save and Deploy**. Cloudflare Pages will automatically build and deploy your edge platform on every push!
+---
+
+## 📄 License & Ownership
+
+Copyright © 2026 Built Networks LLC. Built specifically for Southwest Iowa communities.
+All rights reserved.
