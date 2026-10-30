@@ -21,6 +21,7 @@ import {
   Loader2,
   Gift,
   AlertTriangle,
+  UserPlus,
 } from 'lucide-react';
 import type { Listing, UserProfile, Suggestion } from '../types';
 
@@ -76,6 +77,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [resettingPassword, setResettingPassword] = useState(false);
   const [updatingTier, setUpdatingTier] = useState(false);
   const [adminFeedback, setAdminFeedback] = useState<string | null>(null);
+
+  // Admin: Create User state
+  const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'user' | 'landlord' | 'business' | 'admin'>('user');
+  const [newUserTier, setNewUserTier] = useState<'free' | 'pro_monthly' | 'pro_annual'>('free');
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [createUserError, setCreateUserError] = useState<string | null>(null);
 
   const isAdmin = currentUser.role === 'admin';
   const isPro = currentUser.tier === 'pro_monthly' || currentUser.tier === 'pro_annual';
@@ -232,6 +243,57 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setAdminFeedback('Error resetting password');
     } finally {
       setResettingPassword(false);
+      setTimeout(() => setAdminFeedback(null), 4000);
+    }
+  };
+
+  // Admin: Provision New User
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateUserError(null);
+
+    if (!newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim()) {
+      setCreateUserError('Please fill in all required fields.');
+      return;
+    }
+
+    if (newUserPassword.length < 6) {
+      setCreateUserError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newUserName.trim(),
+          email: newUserEmail.trim().toLowerCase(),
+          password: newUserPassword.trim(),
+          role: newUserRole,
+          tier: newUserTier,
+        }),
+      });
+
+      const data = (await res.json()) as any;
+
+      if (!res.ok) {
+        setCreateUserError(data.error || 'Failed to create user account.');
+      } else {
+        setAdminFeedback(`User ${newUserEmail.trim().toLowerCase()} created successfully!`);
+        setIsCreateUserModalOpen(false);
+        setNewUserName('');
+        setNewUserEmail('');
+        setNewUserPassword('');
+        setNewUserRole('user');
+        setNewUserTier('free');
+        fetchAdminUsers();
+      }
+    } catch {
+      setCreateUserError('A network error occurred. Please try again.');
+    } finally {
+      setCreatingUser(false);
       setTimeout(() => setAdminFeedback(null), 4000);
     }
   };
@@ -414,18 +476,37 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 Platform Users & Pro Licenses
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Reset passwords, update credentials, and grant Pro licenses to testers.
+                Provision new accounts, reset passwords, update credentials, and grant Pro licenses.
               </p>
             </div>
 
-            <div className="w-full sm:w-64">
-              <input
-                type="text"
-                placeholder="Search user name or email..."
-                value={searchUserQuery}
-                onChange={(e) => setSearchUserQuery(e.target.value)}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:border-prairie-500 outline-none min-h-[40px]"
-              />
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewUserName('');
+                  setNewUserEmail('');
+                  setNewUserPassword('');
+                  setNewUserRole('user');
+                  setNewUserTier('free');
+                  setCreateUserError(null);
+                  setIsCreateUserModalOpen(true);
+                }}
+                className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 min-h-[40px] shadow-sm transition-all active:scale-95 flex-shrink-0"
+              >
+                <UserPlus className="w-4 h-4 stroke-[2.5]" />
+                <span>Create New User</span>
+              </button>
+
+              <div className="w-full sm:w-56">
+                <input
+                  type="text"
+                  placeholder="Search user name or email..."
+                  value={searchUserQuery}
+                  onChange={(e) => setSearchUserQuery(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:border-prairie-500 outline-none min-h-[40px]"
+                />
+              </div>
             </div>
           </div>
 
@@ -681,6 +762,161 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedUserForPasswordReset(null)}
+                      className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 min-h-[44px]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Create User Modal */}
+          {isCreateUserModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl relative text-slate-800 dark:text-slate-100 my-6">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateUserModalOpen(false)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-100 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-800 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                    <UserPlus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 dark:text-white">Provision New User</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Create a new account with custom role, tier, and credentials.
+                    </p>
+                  </div>
+                </div>
+
+                {createUserError && (
+                  <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-2xl text-rose-700 dark:text-rose-200 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>{createUserError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleCreateUserSubmit} className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Full Name / Business Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. John Doe or Southwest Realty"
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-purple-500 outline-none min-h-[44px]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="user@example.com"
+                      value={newUserEmail}
+                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-purple-500 outline-none min-h-[44px]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Account Role
+                      </label>
+                      <select
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value as any)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-purple-500 outline-none min-h-[44px]"
+                      >
+                        <option value="user">Regular User</option>
+                        <option value="landlord">Landlord / Owner</option>
+                        <option value="business">Contractor / Business</option>
+                        <option value="admin">Administrator</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        License Tier
+                      </label>
+                      <select
+                        value={newUserTier}
+                        onChange={(e) => setNewUserTier(e.target.value as any)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-purple-500 outline-none min-h-[44px]"
+                      >
+                        <option value="free">Free Tier</option>
+                        <option value="pro_monthly">Pro Monthly ($10/mo)</option>
+                        <option value="pro_annual">Pro Annual ($100/yr)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Initial Password * (min 6 characters)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%&*';
+                          let generated = '';
+                          for (let i = 0; i < 12; i++) {
+                            generated += chars.charAt(Math.floor(Math.random() * chars.length));
+                          }
+                          setNewUserPassword(generated);
+                        }}
+                        className="text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline"
+                      >
+                        🎲 Generate Strong
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      minLength={6}
+                      placeholder="Enter or generate password..."
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-purple-500 outline-none min-h-[44px]"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={creatingUser || !newUserName.trim() || !newUserEmail.trim() || newUserPassword.length < 6}
+                      className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs min-h-[44px] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      {creatingUser ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Creating Account...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-4 h-4" />
+                          <span>Create User</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateUserModalOpen(false)}
                       className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 min-h-[44px]"
                     >
                       Cancel

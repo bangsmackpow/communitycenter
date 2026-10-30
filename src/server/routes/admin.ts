@@ -37,6 +37,77 @@ adminRoutes.get('/users', async (c) => {
   return c.json({ users: allUsers });
 });
 
+// POST /api/admin/users - Admin provisions a new user
+const createAdminUserSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Valid email is required'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  role: z.enum(['user', 'landlord', 'business', 'admin']).default('user'),
+  tier: z.enum(['free', 'pro_monthly', 'pro_annual']).default('free'),
+});
+
+adminRoutes.post('/users', zValidator('json', createAdminUserSchema), async (c) => {
+  const db = c.get('db');
+  const { name, email, password, role, tier } = c.req.valid('json');
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const existing = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.email, normalizedEmail))
+    .get();
+
+  if (existing) {
+    return c.json({ error: 'A user with this email address already exists.' }, 400);
+  }
+
+  const userId = crypto.randomUUID();
+  const hashedPassword = await hashPassword(password);
+  const now = new Date();
+  const tierExpiresAt =
+    tier === 'free'
+      ? null
+      : new Date(Date.now() + (tier === 'pro_monthly' ? 30 : 365) * 24 * 60 * 60 * 1000);
+
+  await db.insert(schema.users).values({
+    id: userId,
+    name: name.trim(),
+    email: normalizedEmail,
+    emailVerified: true,
+    role: role as any,
+    tier: tier as any,
+    tierExpiresAt,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await db.insert(schema.accounts).values({
+    id: crypto.randomUUID(),
+    userId,
+    accountId: normalizedEmail,
+    providerId: 'credential',
+    password: hashedPassword,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return c.json(
+    {
+      success: true,
+      message: `User ${normalizedEmail} successfully created.`,
+      user: {
+        id: userId,
+        name: name.trim(),
+        email: normalizedEmail,
+        role,
+        tier,
+        tierExpiresAt,
+      },
+    },
+    201
+  );
+});
+
 // POST /api/admin/users/:id/reset-password - Admin resets any user password
 const resetPasswordSchema = z.object({
   newPassword: z.string().min(6),
