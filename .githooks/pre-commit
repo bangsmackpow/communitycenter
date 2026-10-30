@@ -1,0 +1,8 @@
+#!/bin/sh
+# Git pre-commit hook to scan staged files for cleartext credentials and secrets
+
+node scripts/check-secrets.js --staged
+if [ $? -ne 0 ]; then
+  echo "Commit rejected: remove cleartext secrets or credentials before committing."
+  exit 1
+fi

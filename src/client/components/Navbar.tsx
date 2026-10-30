@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   MapPin,
   Search,
@@ -11,6 +11,8 @@ import {
   Sparkles,
   MessageSquarePlus,
   Users,
+  KeyRound,
+  ChevronDown,
 } from 'lucide-react';
 import { SW_IOWA_TOWNS } from '../../db/constants';
 import type { UserProfile } from '../types';
@@ -23,6 +25,7 @@ interface NavbarProps {
   onOpenCreate: () => void;
   onOpenDashboard: () => void;
   onOpenAdminUsers?: () => void;
+  onOpenChangePassword?: () => void;
   onOpenAuth: () => void;
   onOpenPricing: () => void;
   onOpenSuggestion: () => void;
@@ -40,6 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCreate,
   onOpenDashboard,
   onOpenAdminUsers,
+  onOpenChangePassword,
   onOpenAuth,
   onOpenPricing,
   onOpenSuggestion,
@@ -48,8 +52,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   isDarkMode,
   onToggleTheme,
 }) => {
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const isPro = currentUser?.tier === 'pro_monthly' || currentUser?.tier === 'pro_annual';
   const isAdmin = currentUser?.role === 'admin';
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    if (isUserMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isUserMenuOpen]);
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
@@ -165,32 +185,109 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* User Profile / Login */}
+            {/* User Profile Menu / Login */}
             {currentUser ? (
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 min-h-[44px]">
-                <div className="flex flex-col text-right">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[90px] sm:max-w-[120px]">
-                      {currentUser.name}
-                    </span>
-                    {isAdmin && (
-                      <span className="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 text-[9px] font-black px-1.5 py-0.2 rounded">
-                        ADMIN
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">
-                    {isPro ? '⭐ Pro Plan' : 'Free Member'}
-                  </span>
-                </div>
+              <div className="relative" ref={userMenuRef}>
                 <button
-                  onClick={onLogout}
-                  className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 ml-1 rounded"
-                  title="Sign out"
-                  aria-label="Sign out"
+                  type="button"
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 min-h-[44px] transition-colors text-left"
+                  aria-label="User account menu"
+                  aria-expanded={isUserMenuOpen}
                 >
-                  <LogOut className="w-3.5 h-3.5" />
+                  <div className="flex flex-col text-right">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[85px] sm:max-w-[120px]">
+                        {currentUser.name}
+                      </span>
+                      {isAdmin && (
+                        <span className="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 text-[9px] font-black px-1.5 py-0.2 rounded">
+                          ADMIN
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">
+                      {isPro ? '⭐ Pro Plan' : 'Free Member'}
+                    </span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                 </button>
+
+                {/* Dropdown Menu */}
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl py-2 z-50 animate-fade-in text-xs">
+                    <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700/60 mb-1">
+                      <p className="font-bold text-slate-900 dark:text-white truncate">{currentUser.name}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{currentUser.email}</p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                          isPro
+                            ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}>
+                          {isPro ? '⭐ PRO TIER' : 'FREE TIER'}
+                        </span>
+                        {isAdmin && (
+                          <span className="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[9px] font-black px-1.5 py-0.5 rounded">
+                            ADMIN
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        onOpenDashboard();
+                      }}
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-prairie-600 dark:text-prairie-400" />
+                      <span>My Dashboard</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        if (onOpenChangePassword) onOpenChangePassword();
+                      }}
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold"
+                    >
+                      <KeyRound className="w-4 h-4 text-amber-500" />
+                      <span>Change Password</span>
+                    </button>
+
+                    {isAdmin && onOpenAdminUsers && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          onOpenAdminUsers();
+                        }}
+                        className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-bold"
+                      >
+                        <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        <span>Admin: Users & Pro Licenses</span>
+                      </button>
+                    )}
+
+                    <div className="border-t border-slate-100 dark:border-slate-700/60 my-1"></div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        onLogout();
+                      }}
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-semibold"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <button

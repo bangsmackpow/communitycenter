@@ -55,8 +55,10 @@ app.use('*', async (c, next) => {
             .get();
 
           if (user) {
-            // Curtis always has admin role and pro_annual tier
-            if (user.email === 'curtis@builtnetworks.com') {
+            // Apply admin role and pro tier if user email matches configured ADMIN_EMAIL(S)
+            const adminEmailConfig = (c.env as any)?.ADMIN_EMAIL || (c.env as any)?.ADMIN_EMAILS || '';
+            const adminEmails = adminEmailConfig.toLowerCase().split(',').map((e: string) => e.trim()).filter(Boolean);
+            if (adminEmails.includes(user.email.toLowerCase())) {
               user.role = 'admin';
               user.tier = 'pro_annual';
             }
@@ -86,7 +88,9 @@ app.use('*', async (c, next) => {
         });
         if (betterSession) {
           const currentUser = betterSession.user as any;
-          if (currentUser.email === 'curtis@builtnetworks.com') {
+          const adminEmailConfig = (c.env as any)?.ADMIN_EMAIL || (c.env as any)?.ADMIN_EMAILS || '';
+          const adminEmails = adminEmailConfig.toLowerCase().split(',').map((e: string) => e.trim()).filter(Boolean);
+          if (adminEmails.includes(currentUser.email?.toLowerCase())) {
             currentUser.role = 'admin';
             currentUser.tier = 'pro_annual';
           }

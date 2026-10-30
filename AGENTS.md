@@ -147,9 +147,8 @@ npx wrangler d1 execute southwest-iowa-db --remote --command="SELECT count(*) FR
 
 ---
 
-## 8. Default Administrator Account
+## 8. Administrator Account Configuration
 
-- **Email:** `curtis@builtnetworks.com`
-- **Default Password:** `[REDACTED_PASSWORD_SEC]`
-- **Role:** `admin` (global moderation, password resets, Pro license grants, safety queue takedowns)
-- **Tier:** `pro_annual` (unlimited listings, priority featured placement)
+- **Configuration:** Set the `ADMIN_EMAIL` (or comma-separated `ADMIN_EMAILS`) environment variable in Cloudflare Pages.
+- **Role Elevation:** Any user signing in with an email defined in `ADMIN_EMAIL` receives the `admin` role and `pro_annual` tier.
+- **Credential Hygiene:** Never commit cleartext passwords or credentials into `AGENTS.md`, `README.md`, source code, or migration scripts. All passwords must be managed via edge PBKDF2 hashing through the app UI (`/api/auth/change-password` or `/api/admin/users/:id/reset-password`). Pre-commit hooks enforce secret scanning.

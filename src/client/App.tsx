@@ -10,6 +10,7 @@ import { Dashboard } from './views/Dashboard';
 import { AuthModal } from './components/AuthModal';
 import { PricingModal } from './components/PricingModal';
 import { SuggestionModal } from './components/SuggestionModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { Footer } from './components/Footer';
 
 export const App: React.FC = () => {
@@ -27,6 +28,7 @@ export const App: React.FC = () => {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isPricingOpen, setIsPricingOpen] = useState(false);
   const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [targetListingForEdit, setTargetListingForEdit] = useState<Listing | null>(null);
 
   // Theme: Light Mode as default, Dark Mode selectable
@@ -349,6 +351,13 @@ export const App: React.FC = () => {
             setCurrentView('dashboard');
           }
         }}
+        onOpenChangePassword={() => {
+          if (!currentUser) {
+            setIsAuthOpen(true);
+          } else {
+            setIsChangePasswordOpen(true);
+          }
+        }}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenPricing={() => setIsPricingOpen(true)}
         onOpenSuggestion={handleOpenGeneralSuggestion}
@@ -407,6 +416,7 @@ export const App: React.FC = () => {
             onBack={() => setCurrentView('feed')}
             onOpenCreate={() => setCurrentView('create')}
             onOpenPricing={() => setIsPricingOpen(true)}
+            onOpenChangePassword={() => setIsChangePasswordOpen(true)}
             onToggleRented={handleToggleRented}
             onDelete={handleDeleteListing}
             onSelectListing={handleSelectListing}
@@ -439,6 +449,14 @@ export const App: React.FC = () => {
         currentTier={currentUser?.tier || 'free'}
         onClose={() => setIsPricingOpen(false)}
         onUpgradeSuccess={handleUpgradeSuccess}
+      />
+
+      {/* Account Security: Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+        currentUser={currentUser}
+        onSuccess={() => showToast('Password changed successfully!')}
       />
 
       {/* Community Suggestion / Edit Modal */}

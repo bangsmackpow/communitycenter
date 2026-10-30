@@ -31,6 +31,7 @@ interface DashboardProps {
   onBack: () => void;
   onOpenCreate: () => void;
   onOpenPricing: () => void;
+  onOpenChangePassword?: () => void;
   onToggleRented: (listingId: string, currentStatus: string) => Promise<void>;
   onDelete: (listingId: string) => Promise<void>;
   onSelectListing: (listing: Listing) => void;
@@ -43,6 +44,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onBack,
   onOpenCreate,
   onOpenPricing,
+  onOpenChangePassword,
   onToggleRented,
   onDelete,
   onSelectListing,
@@ -69,8 +71,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [searchUserQuery, setSearchUserQuery] = useState('');
   const [selectedUserForPasswordReset, setSelectedUserForPasswordReset] = useState<any | null>(null);
+  const [selectedUserForTierModal, setSelectedUserForTierModal] = useState<any | null>(null);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [updatingTier, setUpdatingTier] = useState(false);
   const [adminFeedback, setAdminFeedback] = useState<string | null>(null);
 
   const isAdmin = currentUser.role === 'admin';
@@ -174,25 +178,34 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  // Admin: Grant Pro License
-  const handleGrantPro = async (userId: string, userEmail: string) => {
+  // Admin: Update User Tier & Pro License
+  const handleUpdateUserTier = async (
+    userId: string,
+    userEmail: string,
+    tier: 'free' | 'pro_monthly' | 'pro_annual',
+    durationDays = 365
+  ) => {
+    setUpdatingTier(true);
     try {
       const res = await fetch(`/api/admin/users/${userId}/grant-pro`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier: 'pro_annual', durationDays: 365 }),
+        body: JSON.stringify({ tier, durationDays }),
       });
       const data = await res.json() as any;
       if (res.ok) {
-        setAdminFeedback(`Granted 1-Year Pro Testing License to ${userEmail}!`);
+        setAdminFeedback(data.message || `Tier updated for ${userEmail}`);
         fetchAdminUsers();
+        setSelectedUserForTierModal(null);
       } else {
-        setAdminFeedback(data.error || 'Failed to grant license');
+        setAdminFeedback(data.error || 'Failed to update license');
       }
     } catch {
-      setAdminFeedback('Error granting license');
+      setAdminFeedback('Error updating user license');
+    } finally {
+      setUpdatingTier(false);
+      setTimeout(() => setAdminFeedback(null), 4000);
     }
-    setTimeout(() => setAdminFeedback(null), 4000);
   };
 
   // Admin: Reset Password Submit
@@ -283,15 +296,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
           </div>
 
-          {!isPro && (
-            <button
-              onClick={onOpenPricing}
-              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-all active:scale-95 min-h-[44px]"
-            >
-              <Zap className="w-4 h-4 fill-current" />
-              <span>Upgrade to Pro ($10/mo)</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {onOpenChangePassword && (
+              <button
+                type="button"
+                onClick={onOpenChangePassword}
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 min-h-[44px] transition-colors shadow-sm"
+                title="Change your account password"
+              >
+                <KeyRound className="w-4 h-4 text-prairie-600 dark:text-prairie-400" />
+                <span>Change Password</span>
+              </button>
+            )}
+
+            {!isPro && (
+              <button
+                onClick={onOpenPricing}
+                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-all active:scale-95 min-h-[44px]"
+              >
+                <Zap className="w-4 h-4 fill-current" />
+                <span>Upgrade to Pro ($10/mo)</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Dashboard Sub-tabs */}
@@ -444,23 +471,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
 
                     {/* Admin Actions */}
-                    <div className="flex items-center gap-2">
-                      {/* Grant Pro License */}
-                      {!userIsPro ? (
-                        <button
-                          type="button"
-                          onClick={() => handleGrantPro(u.id, u.email)}
-                          className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 min-h-[38px] transition-colors shadow-sm"
-                          title="Grant 1-Year Pro Testing License"
-                        >
-                          <Gift className="w-3.5 h-3.5" />
-                          <span>Grant Pro License</span>
-                        </button>
-                      ) : (
-                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                          ✓ Pro Licensed
-                        </span>
-                      )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Manage Pro License & Tier Button */}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUserForTierModal(u)}
+                        className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 min-h-[38px] transition-colors shadow-sm ${
+                          userIsPro
+                            ? 'bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700'
+                            : 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                        }`}
+                        title="Grant, extend or revoke Pro Tier license"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 fill-current" />
+                        <span>{userIsPro ? 'Manage Pro Tier' : 'Grant Pro Tier'}</span>
+                      </button>
 
                       {/* Reset Password */}
                       <button
@@ -469,10 +494,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           setSelectedUserForPasswordReset(u);
                           setNewPasswordInput('');
                         }}
-                        className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 min-h-[38px] transition-colors border border-slate-300 dark:border-slate-600"
+                        className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 min-h-[38px] transition-colors border border-slate-300 dark:border-slate-600 shadow-sm"
                         title="Reset User Password"
                       >
-                        <KeyRound className="w-3.5 h-3.5 text-prairie-600" />
+                        <KeyRound className="w-3.5 h-3.5 text-prairie-600 dark:text-prairie-400" />
                         <span>Reset Pass</span>
                       </button>
                     </div>
@@ -482,34 +507,159 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           )}
 
+          {/* Manage Pro License & Tier Modal */}
+          {selectedUserForTierModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl relative text-slate-800 dark:text-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedUserForTierModal(null)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  aria-label="Close dialog"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 dark:text-white">Manage Pro License & Tier</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      User: <strong className="text-slate-800 dark:text-slate-200">{selectedUserForTierModal.email}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-xs mb-4 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 dark:text-slate-400">Current Status:</span>
+                    <span className="font-bold uppercase text-prairie-700 dark:text-prairie-400">
+                      {selectedUserForTierModal.tier || 'FREE'}
+                    </span>
+                  </div>
+                  {selectedUserForTierModal.tierExpiresAt && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Expires:</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                        {new Date(selectedUserForTierModal.tierExpiresAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2.5">
+                  Select an administrative license action:
+                </p>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    disabled={updatingTier}
+                    onClick={() => handleUpdateUserTier(selectedUserForTierModal.id, selectedUserForTierModal.email, 'pro_annual', 365)}
+                    className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold p-3 rounded-2xl text-xs flex items-center justify-between shadow-sm transition-all min-h-[44px] disabled:opacity-50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 fill-current" />
+                      <span>Grant 1-Year Pro Annual (365 Days)</span>
+                    </div>
+                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-lg">$100 Value</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={updatingTier}
+                    onClick={() => handleUpdateUserTier(selectedUserForTierModal.id, selectedUserForTierModal.email, 'pro_monthly', 30)}
+                    className="w-full bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/70 dark:hover:bg-amber-900/70 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 font-bold p-3 rounded-2xl text-xs flex items-center justify-between transition-colors min-h-[44px] disabled:opacity-50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Gift className="w-4 h-4" />
+                      <span>Grant 1-Month Pro Monthly (30 Days)</span>
+                    </div>
+                    <span className="text-[10px] bg-amber-200/60 dark:bg-amber-900/60 px-2 py-0.5 rounded-lg">$10 Value</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={updatingTier}
+                    onClick={() => handleUpdateUserTier(selectedUserForTierModal.id, selectedUserForTierModal.email, 'free', 0)}
+                    className="w-full bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 font-semibold p-3 rounded-2xl text-xs flex items-center justify-between transition-colors min-h-[44px] disabled:opacity-50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <X className="w-4 h-4" />
+                      <span>Revoke Pro License (Set to Free Tier)</span>
+                    </div>
+                    <span className="text-[10px] bg-rose-200/50 dark:bg-rose-900/50 px-2 py-0.5 rounded-lg">Free Tier</span>
+                  </button>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 text-right">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUserForTierModal(null)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Reset Password Modal */}
           {selectedUserForPasswordReset && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-sm p-5 sm:p-6 shadow-2xl relative text-slate-800 dark:text-slate-100">
                 <button
+                  type="button"
                   onClick={() => setSelectedUserForPasswordReset(null)}
-                  className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+                  className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
 
-                <h3 className="text-base font-black">Reset Password for User</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  User: <strong>{selectedUserForPasswordReset.email}</strong>
+                <div className="flex items-center gap-2.5 mb-2">
+                  <KeyRound className="w-5 h-5 text-prairie-600 dark:text-prairie-400" />
+                  <h3 className="text-base font-black">Reset Password for User</h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                  Account: <strong className="text-slate-800 dark:text-slate-200">{selectedUserForPasswordReset.email}</strong>
+                  {selectedUserForPasswordReset.id === currentUser.id && (
+                    <span className="block text-prairie-600 dark:text-prairie-400 font-bold mt-1">
+                      (Note: You are updating your own administrator account)
+                    </span>
+                  )}
                 </p>
 
-                <form onSubmit={handleResetPasswordSubmit} className="mt-4 space-y-3">
+                <form onSubmit={handleResetPasswordSubmit} className="space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      New Password (min 6 characters)
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        New Password
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%&*';
+                          let generated = '';
+                          for (let i = 0; i < 12; i++) {
+                            generated += chars.charAt(Math.floor(Math.random() * chars.length));
+                          }
+                          setNewPasswordInput(generated);
+                        }}
+                        className="text-[11px] font-bold text-prairie-600 dark:text-prairie-400 hover:underline"
+                      >
+                        🎲 Generate Strong
+                      </button>
+                    </div>
                     <input
                       type="text"
                       required
-                      placeholder="Enter new password..."
+                      placeholder="At least 6 characters..."
                       value={newPasswordInput}
                       onChange={(e) => setNewPasswordInput(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:border-prairie-500 outline-none min-h-[44px]"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-prairie-500 outline-none min-h-[44px]"
                     />
                   </div>
 
@@ -517,9 +667,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <button
                       type="submit"
                       disabled={resettingPassword || newPasswordInput.length < 6}
-                      className="flex-1 bg-prairie-600 hover:bg-prairie-500 text-white font-bold py-2.5 rounded-xl text-xs min-h-[44px] transition-colors disabled:opacity-50"
+                      className="flex-1 bg-prairie-600 hover:bg-prairie-500 text-white font-bold py-2.5 rounded-xl text-xs min-h-[44px] transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
                     >
-                      {resettingPassword ? 'Updating...' : 'Save New Password'}
+                      {resettingPassword ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Updating...</span>
+                        </>
+                      ) : (
+                        <span>Save New Password</span>
+                      )}
                     </button>
                     <button
                       type="button"

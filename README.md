@@ -156,14 +156,17 @@ Add the following in **Pages > Settings > Environment variables**:
 
 ---
 
-## 🔑 Default Administrator Credentials
+## 🔑 Administrator Setup
 
-Once logged in with this account, you will have global administrative privileges, including the **Manage Users** dashboard, password resets, license granting, and the safety report takedown queue:
+To designate administrator accounts with global privileges (including the **Manage Users & Licenses** dashboard, safety report takedown queue, and Pro license assignment):
 
-- **Email:** `curtis@builtnetworks.com`
-- **Password:** `[REDACTED_PASSWORD_SEC]`
-- **Role:** `admin`
-- **Tier:** `pro_annual` (Unlimited active listings + featured placement)
+1. Add the `ADMIN_EMAIL` (or comma-separated `ADMIN_EMAILS`) environment variable in your Cloudflare Pages Dashboard under **Settings > Environment Variables**:
+   ```
+   ADMIN_EMAIL=your-admin@example.com
+   ```
+2. When registering or signing in with this email, the account is automatically provisioned with the `admin` role and `pro_annual` tier.
+3. Passwords can be changed directly from the in-app user account menu (**Change Password**).
+4. Never store or commit cleartext passwords or secrets to this repository. Automated git pre-commit hooks and CI scans prevent unencrypted credentials from being pushed.
 
 ---
 

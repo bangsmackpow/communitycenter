@@ -48,9 +48,13 @@ authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
   const hashedPassword = await hashPassword(body.password);
   const now = new Date();
 
-  // If registering as curtis@builtnetworks.com, ensure admin role and pro tier
-  const role = email === 'curtis@builtnetworks.com' ? 'admin' : body.role;
-  const tier = email === 'curtis@builtnetworks.com' ? 'pro_annual' : 'free';
+  // Check if email matches configured admin email(s) via environment variable
+  const adminEmailConfig = (c.env as any)?.ADMIN_EMAIL || (c.env as any)?.ADMIN_EMAILS || '';
+  const adminEmails = adminEmailConfig.toLowerCase().split(',').map((e: string) => e.trim()).filter(Boolean);
+  const isAdmin = adminEmails.includes(email);
+
+  const role = isAdmin ? 'admin' : body.role;
+  const tier = isAdmin ? 'pro_annual' : 'free';
 
   await db.insert(schema.users).values({
     id: userId,
@@ -212,8 +216,10 @@ authRoutes.get('/me', async (c) => {
     return c.json({ user: null });
   }
 
-  // Ensure Curtis has admin role and pro_annual tier
-  if (user.email === 'curtis@builtnetworks.com') {
+  // Ensure configured admin email(s) have admin role and pro_annual tier
+  const adminEmailConfig = (c.env as any)?.ADMIN_EMAIL || (c.env as any)?.ADMIN_EMAILS || '';
+  const adminEmails = adminEmailConfig.toLowerCase().split(',').map((e: string) => e.trim()).filter(Boolean);
+  if (adminEmails.includes(user.email.toLowerCase())) {
     user.role = 'admin';
     user.tier = 'pro_annual';
   }
@@ -227,6 +233,90 @@ authRoutes.get('/me', async (c) => {
       tier: user.tier,
       image: user.image,
     },
+  });
+});
+
+// POST /api/auth/change-password - Change password for the authenticated user
+const changePasswordSchema = z.object({
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+authRoutes.post('/change-password', zValidator('json', changePasswordSchema), async (c) => {
+  const db = c.get('db');
+  let user = c.get('user');
+
+  // If user not in context via middleware, check sw_session cookie
+  if (!user) {
+    const cookie = c.req.header('cookie') || '';
+    const match = cookie.match(/sw_session=([^;]+)/);
+    const authHeader = c.req.header('authorization');
+    const token = match?.[1] || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null);
+
+    if (token) {
+      const session = await db
+        .select()
+        .from(schema.sessions)
+        .where(and(eq(schema.sessions.token, token), sql`${schema.sessions.expiresAt} > unixepoch()`))
+        .get();
+
+      if (session) {
+        user = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, session.userId))
+          .get() as any;
+      }
+    }
+  }
+
+  if (!user) {
+    return c.json({ error: 'Authentication required. Please sign in.' }, 401);
+  }
+
+  const { currentPassword, newPassword } = c.req.valid('json');
+
+  // Check if user has an existing credential account
+  const account = await db
+    .select()
+    .from(schema.accounts)
+    .where(and(eq(schema.accounts.userId, user.id), eq(schema.accounts.providerId, 'credential')))
+    .get();
+
+  if (account && account.password) {
+    if (!currentPassword) {
+      return c.json({ error: 'Current password is required to change password.' }, 400);
+    }
+    const isValid = await verifyPassword(currentPassword, account.password);
+    if (!isValid) {
+      return c.json({ error: 'Current password does not match.' }, 400);
+    }
+  }
+
+  const hashedPassword = await hashPassword(newPassword);
+  const now = new Date();
+
+  if (account) {
+    await db
+      .update(schema.accounts)
+      .set({ password: hashedPassword, updatedAt: now })
+      .where(eq(schema.accounts.id, account.id));
+  } else {
+    // If user originally signed up via OAuth, create credential account for password access
+    await db.insert(schema.accounts).values({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      accountId: user.email,
+      providerId: 'credential',
+      password: hashedPassword,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return c.json({
+    success: true,
+    message: 'Your password has been changed successfully.',
   });
 });
 
@@ -305,8 +395,11 @@ authRoutes.get('/oauth/google/callback', async (c) => {
 
     if (!user) {
       const userId = crypto.randomUUID();
-      const role = email === 'curtis@builtnetworks.com' ? 'admin' : 'user';
-      const tier = email === 'curtis@builtnetworks.com' ? 'pro_annual' : 'free';
+      const adminEmailConfig = (c.env as any)?.ADMIN_EMAIL || (c.env as any)?.ADMIN_EMAILS || '';
+      const adminEmails = adminEmailConfig.toLowerCase().split(',').map((e: string) => e.trim()).filter(Boolean);
+      const isConfigAdmin = adminEmails.includes(email);
+      const role = isConfigAdmin ? 'admin' : 'user';
+      const tier = isConfigAdmin ? 'pro_annual' : 'free';
       await db.insert(schema.users).values({
         id: userId,
         name: profile.name || email.split('@')[0],
@@ -407,8 +500,11 @@ authRoutes.get('/oauth/facebook/callback', async (c) => {
 
     if (!user) {
       const userId = crypto.randomUUID();
-      const role = email === 'curtis@builtnetworks.com' ? 'admin' : 'user';
-      const tier = email === 'curtis@builtnetworks.com' ? 'pro_annual' : 'free';
+      const adminEmailConfig = (c.env as any)?.ADMIN_EMAIL || (c.env as any)?.ADMIN_EMAILS || '';
+      const adminEmails = adminEmailConfig.toLowerCase().split(',').map((e: string) => e.trim()).filter(Boolean);
+      const isConfigAdmin = adminEmails.includes(email);
+      const role = isConfigAdmin ? 'admin' : 'user';
+      const tier = isConfigAdmin ? 'pro_annual' : 'free';
       await db.insert(schema.users).values({
         id: userId,
         name: profile.name || 'Facebook User',

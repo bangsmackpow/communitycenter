@@ -90,10 +90,10 @@ adminRoutes.post('/users/:id/reset-password', zValidator('json', resetPasswordSc
   });
 });
 
-// POST /api/admin/users/:id/grant-pro - Give Pro license to anyone wanting to test
+// POST /api/admin/users/:id/grant-pro - Grant Pro license or set tier for any user
 const grantProSchema = z.object({
-  tier: z.enum(['pro_monthly', 'pro_annual']).default('pro_annual'),
-  durationDays: z.number().int().positive().default(365),
+  tier: z.enum(['free', 'pro_monthly', 'pro_annual']).default('pro_annual'),
+  durationDays: z.number().int().nonnegative().default(365),
 });
 
 adminRoutes.post('/users/:id/grant-pro', zValidator('json', grantProSchema), async (c) => {
@@ -101,7 +101,17 @@ adminRoutes.post('/users/:id/grant-pro', zValidator('json', grantProSchema), asy
   const userId = c.req.param('id');
   const { tier, durationDays } = c.req.valid('json');
 
-  const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
+  const targetUser = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .get();
+
+  if (!targetUser) {
+    return c.json({ error: 'User not found.' }, 404);
+  }
+
+  const expiresAt = tier === 'free' ? null : new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
 
   await db
     .update(schema.users)
@@ -112,9 +122,13 @@ adminRoutes.post('/users/:id/grant-pro', zValidator('json', grantProSchema), asy
     })
     .where(eq(schema.users.id, userId));
 
+  const message = tier === 'free'
+    ? `Pro license revoked. ${targetUser.email} set to Free Tier.`
+    : `Granted ${tier.toUpperCase()} license to ${targetUser.email} (valid for ${durationDays} days).`;
+
   return c.json({
     success: true,
-    message: `Granted ${tier.toUpperCase()} testing license (valid for ${durationDays} days).`,
+    message,
     tier,
     expiresAt,
   });
