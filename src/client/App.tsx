@@ -26,6 +26,9 @@ export const App: React.FC = () => {
 
   // Modals
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState<'signin' | 'register' | 'forgot' | 'reset'>('signin');
+  const [resetToken, setResetToken] = useState<string>('');
+  const [resetEmail, setResetEmail] = useState<string>('');
   const [isPricingOpen, setIsPricingOpen] = useState(false);
   const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
@@ -103,13 +106,22 @@ export const App: React.FC = () => {
     fetchListings();
   }, []);
 
-  // Check for Stripe return URL params
+  // Check for Stripe return URL params & 1-Click Password Reset Link
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('upgraded') === 'true') {
         showToast('Stripe payment verified! Your account is now Pro.');
-        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      const token = urlParams.get('reset_token');
+      const email = urlParams.get('email');
+      if (token && email) {
+        setResetToken(token);
+        setResetEmail(email);
+        setAuthInitialMode('reset');
+        setIsAuthOpen(true);
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
@@ -433,10 +445,18 @@ export const App: React.FC = () => {
       {/* Mobile Bottom Dock Navigation */}
       <BottomNav activeTab={activeBottomTab} onSelectTab={handleBottomTab} />
 
-      {/* Auth Modal (Login / Register / Edge Authentication) */}
+      {/* Auth Modal (Login / Register / Forgot Password / Edge Authentication) */}
       <AuthModal
         isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
+        initialMode={authInitialMode}
+        resetToken={resetToken}
+        resetEmail={resetEmail}
+        onClose={() => {
+          setIsAuthOpen(false);
+          setAuthInitialMode('signin');
+          setResetToken('');
+          setResetEmail('');
+        }}
         onSuccess={(user) => {
           setCurrentUser(user);
           showToast(`Welcome, ${user.name}!`);
