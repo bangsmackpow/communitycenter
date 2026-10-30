@@ -55,8 +55,8 @@ Southwest Iowa Community Central is an edge-native community directory and housi
 │   │   ├── types.ts             # Cloudflare D1 (DB) & R2 (BUCKET) bindings & AppContext
 │   │   ├── index.ts             # Main Hono app mounting all routes, health check, sitemap & robots
 │   │   └── routes/
-│   │       ├── admin.ts         # User management, password resets, Pro licenses & safety queue
-│   │       ├── auth.ts          # Register, login, session validation, Google/Facebook OAuth
+│   │       ├── admin.ts         # User provisioning, password resets, Pro license management & safety queue
+│   │       ├── auth.ts          # Register, login, change-pass, forgot-pass, reset-pass, Google/Facebook OAuth
 │   │       ├── billing.ts       # Stripe Checkout, Customer Portal & Webhook handlers
 │   │       ├── categories.ts    # Category retrieval & seeding
 │   │       ├── cron.ts          # 30-day listing expiration cleanup
@@ -130,6 +130,9 @@ Photos are processed in two steps:
 ```bash
 # Typecheck TypeScript (zero errors required before commit)
 npm run typecheck
+
+# Secret scanning validation (zero secrets permitted)
+npm run check:secrets
 
 # Production Vite build
 npm run build

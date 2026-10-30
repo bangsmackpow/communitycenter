@@ -32,12 +32,15 @@ Connecting rural neighbors, property managers, independent trade contractors, an
 ### 3. Authentication & User Management
 - **Guest-First Architecture:** Unauthenticated visitors start as clean guests (`currentUser = null`) with zero pre-filled test data.
 - **Edge Password Auth:** Secure PBKDF2 SHA-256 (100,000 iterations) native Web Crypto password hashing.
+- **Self-Service Password Changes:** Authenticated users can update their account password at any time via the profile menu or Dashboard banner.
+- **1-Click Forgot Password & Token Reset:** Users can request a 1-click password reset link (`/?reset_token=...&email=...`) with 1-hour expiration.
 - **OAuth Providers:** 1-click **Continue with Google** and **Continue with Facebook** authentication.
 - **Admin Management Console:**
-  - Dedicated **Manage Users** dashboard in the top navigation for administrators.
-  - Search any user by name or email.
-  - Reset any user's password directly on their behalf.
-  - Grant free 1-year Pro testing licenses ($100 value) to community testers with 1 click.
+  - Dedicated **Admin: Users & Pro Licenses** panel accessible on both desktop and mobile.
+  - **Create New Users:** Directly provision accounts with custom roles (`user`, `landlord`, `business`, `admin`), tiers (`free`, `pro_monthly`, `pro_annual`), and initial passwords.
+  - **License Management:** 1-click controls to grant 1-Year Pro Annual ($100 value), 1-Month Pro Monthly ($10 value), or revoke Pro back to Free tier.
+  - **Password Overrides:** Reset any user's password with a built-in strong password generator (`🎲 Generate Strong`).
+  - Search any user by name or email with live status badges and expiration dates.
 
 ### 4. Community Safety, Trust & Disclaimers
 - **Anti-Scam Alert Banners:** Displayed on all rental listings warning against wire-transfer and gift-card scams.
@@ -119,7 +122,12 @@ npm run dev
 npm run typecheck
 ```
 
-### 4. Build for Production
+### 4. Secret & Credential Leak Scan
+```bash
+npm run check:secrets
+```
+
+### 5. Build for Production
 ```bash
 npm run build
 ```
